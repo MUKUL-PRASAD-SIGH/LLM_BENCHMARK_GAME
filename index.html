@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Fight Club</title>
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/landing.css">
+</head>
+
+<body>
+    <div class="landing-container">
+        <div class="logo-container">
+            <img src="assets/images/landing/text.png" alt="LLM Fight Club" class="logo">
+        </div>
+        <button class="play-btn" onclick="navigateTo('select.html')">
+            <img src="assets/images/button/play.png" alt="Play" class="play-icon">
+        </button>
+        <div class="bottom-arena-container">
+            <img src="assets/images/arena/bunny jumping STICKER.gif" alt="Bunny" class="bunny-sticker">
+            <img src="assets/images/arena/arena.png" alt="Arena" class="arena-bottom">
+        </div>
+    </div>
+
+    <audio id="start-music" src="assets/sounds/start.mp3"></audio>
+
+    <script src="js/sound.js"></script>
+    <script src="js/navigation.js"></script>
+    <script>
+        // Play start music when page loads
+        window.addEventListener('DOMContentLoaded', function () {
+            const music = document.getElementById('start-music');
+            music.volume = 0.7;
+            music.play().catch(function (err) {
+                // Autoplay blocked - play on first click
+                document.body.addEventListener('click', function playOnce() {
+                    music.play();
+                    document.body.removeEventListener('click', playOnce);
+                }, { once: true });
+            });
+        });
+    </script>
+</body>
+
+</html>

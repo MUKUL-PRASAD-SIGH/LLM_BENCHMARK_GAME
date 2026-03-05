@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Fighters - LLM Fight Club</title>
+    <link rel="stylesheet" href="css/global.css">
+    <style>
+        body {
+            min-height: 100vh;
+            margin: 0;
+            background: radial-gradient(ellipse at center top, #1e90ff 0%, #0a4a8a 30%, #052a50 60%, #011627 100%);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Scanline overlay for retro effect */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(0deg,
+                    rgba(0, 0, 0, 0.1) 0px,
+                    rgba(0, 0, 0, 0.1) 1px,
+                    transparent 1px,
+                    transparent 3px);
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(ellipse at center, rgba(30, 144, 255, 0.2) 0%, transparent 60%),
+                radial-gradient(circle at 20% 20%, rgba(100, 180, 255, 0.15) 0%, transparent 30%),
+                radial-gradient(circle at 80% 30%, rgba(100, 180, 255, 0.15) 0%, transparent 30%);
+            pointer-events: none;
+        }
+
+        .choose-header {
+            margin-top: 30px;
+            z-index: 1;
+            text-align: center;
+        }
+
+        .choose-header img {
+            max-width: 350px;
+            width: 70vw;
+            height: auto;
+            filter: drop-shadow(0 0 20px rgba(30, 144, 255, 0.6));
+        }
+
+        .selection-area {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 60px;
+            width: 100%;
+            max-width: 900px;
+            padding: 40px 20px;
+            z-index: 1;
+            flex: 1;
+        }
+
+        .player-side {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .player-side h3 {
+            text-align: center;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 12px;
+            color: #fff;
+            margin-bottom: 15px;
+            text-shadow: 2px 2px 0 #000, 4px 4px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .player-btn {
+            background: linear-gradient(180deg, rgba(40, 40, 80, 0.8) 0%, rgba(20, 20, 40, 0.9) 100%);
+            border: 4px solid #4a4a8a;
+            padding: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border-radius: 0;
+            box-shadow:
+                inset 2px 2px 0 rgba(255, 255, 255, 0.2),
+                inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+                4px 4px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .player-btn img {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .player-btn:hover {
+            border-color: #ffcc00;
+            transform: translate(-2px, -2px);
+            background: linear-gradient(180deg, rgba(80, 60, 20, 0.9) 0%, rgba(40, 30, 10, 0.9) 100%);
+            box-shadow:
+                inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+                inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+                6px 6px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .player-btn.selected {
+            border-color: #00ff00;
+            box-shadow:
+                inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+                inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+                0 0 20px rgba(0, 255, 0, 0.6),
+                4px 4px 0 rgba(0, 100, 0, 0.8);
+            background: linear-gradient(180deg, rgba(0, 80, 0, 0.8) 0%, rgba(0, 40, 0, 0.9) 100%);
+        }
+
+        .player-btn.disabled {
+            opacity: 0.3;
+            pointer-events: none;
+            filter: grayscale(100%);
+        }
+
+        .vs-text {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 32px;
+            color: #ff0040;
+            text-shadow:
+                4px 4px 0 #800020,
+                6px 6px 0 #000,
+                0 0 30px rgba(255, 0, 64, 0.8);
+            padding: 0 20px;
+            animation: vsPulse 1s ease-in-out infinite;
+        }
+
+        @keyframes vsPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
+        }
+
+        .done-btn {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(180deg, #33cc33 0%, #22aa22 50%, #118811 100%);
+            border: 4px solid #005500;
+            padding: 12px 35px;
+            cursor: pointer;
+            z-index: 10;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 14px;
+            color: #fff;
+            text-shadow: 2px 2px 0 #000;
+            transition: all 0.15s ease;
+            opacity: 0.5;
+            pointer-events: none;
+            border-radius: 0;
+            box-shadow:
+                inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+                inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+                4px 4px 0 rgba(0, 0, 0, 0.6);
+        }
+
+        .done-btn.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .done-btn.active:hover {
+            background: linear-gradient(180deg, #44dd44 0%, #33cc33 50%, #22aa22 100%);
+            transform: translateX(-50%) translate(-2px, -2px);
+            box-shadow:
+                inset 2px 2px 0 rgba(255, 255, 255, 0.4),
+                inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+                6px 6px 0 rgba(0, 0, 0, 0.6);
+        }
+
+        /* Pixel Transition Overlay */
+        .pixel-transition-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .pixel-transition-overlay.active {
+            pointer-events: all;
+            opacity: 1;
+        }
+
+        .pixel-transition-overlay canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .transition-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Press Start 2P', monospace;
+            font-size: 28px;
+            color: #fff;
+            text-shadow: 4px 4px 0 #000, 0 0 30px rgba(255, 204, 0, 0.8);
+            opacity: 0;
+            z-index: 10000;
+            animation: none;
+        }
+
+        .transition-text.show {
+            animation: fightTextPulse 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes fightTextPulse {
+            from { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            to { transform: translate(-50%, -50%) scale(1.15); opacity: 0.8; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="choose-header">
+        <img src="assets/images/landing/choose.png" alt="Choose Your Fighter">
+    </div>
+
+    <div class="selection-area">
+        <div class="player-side" id="left-side">
+            <h3>PLAYER 1</h3>
+            <button class="player-btn" data-player="1" onclick="selectLeft(1)">
+                <img src="assets/images/characters/player1.png" alt="Player 1">
+            </button>
+            <button class="player-btn" data-player="2" onclick="selectLeft(2)">
+                <img src="assets/images/characters/player2.png" alt="Player 2">
+            </button>
+            <button class="player-btn" data-player="3" onclick="selectLeft(3)">
+                <img src="assets/images/characters/player3.png" alt="Player 3">
+            </button>
+            <button class="player-btn" data-player="4" onclick="selectLeft(4)">
+                <img src="assets/images/characters/player4.png" alt="Player 4">
+            </button>
+        </div>
+
+        <div class="vs-text">VS</div>
+
+        <div class="player-side" id="right-side">
+            <h3>PLAYER 2</h3>
+            <button class="player-btn" data-player="1" onclick="selectRight(1)">
+                <img src="assets/images/characters/player1.png" alt="Player 1">
+            </button>
+            <button class="player-btn" data-player="2" onclick="selectRight(2)">
+                <img src="assets/images/characters/player2.png" alt="Player 2">
+            </button>
+            <button class="player-btn" data-player="3" onclick="selectRight(3)">
+                <img src="assets/images/characters/player3.png" alt="Player 3">
+            </button>
+            <button class="player-btn" data-player="4" onclick="selectRight(4)">
+                <img src="assets/images/characters/player4.png" alt="Player 4">
+            </button>
+        </div>
+    </div>
+
+    <button class="done-btn" id="done-btn" onclick="startFight()">DONE</button>
+
+    <!-- Pixel Transition Overlay -->
+    <div class="pixel-transition-overlay" id="pixel-overlay">
+        <canvas id="pixel-canvas"></canvas>
+        <div class="transition-text" id="transition-text">FIGHT!</div>
+    </div>
+
+    <audio id="bell-sound" src="assets/sounds/bell.mp3"></audio>
+    <audio id="click-sound" src="assets/sounds/click.mp3"></audio>
+
+    <script>
+        // ========== PIXEL TRANSITION CLASS ==========
+        class Pixel {
+            constructor(canvas, ctx, x, y, color, speed, delay) {
+                this.width = canvas.width;
+                this.height = canvas.height;
+                this.ctx = ctx;
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.speed = (Math.random() * 0.8 + 0.1) * speed;
+                this.size = 0;
+                this.sizeStep = Math.random() * 0.4;
+                this.minSize = 0.5;
+                this.maxSizeInteger = 4;
+                this.maxSize = Math.random() * (this.maxSizeInteger - this.minSize) + this.minSize;
+                this.delay = delay;
+                this.counter = 0;
+                this.counterStep = Math.random() * 4 + (this.width + this.height) * 0.01;
+                this.isIdle = false;
+                this.isReverse = false;
+                this.isShimmer = false;
+            }
+
+            draw() {
+                const centerOffset = this.maxSizeInteger * 0.5 - this.size * 0.5;
+                this.ctx.fillStyle = this.color;
+                this.ctx.fillRect(this.x + centerOffset, this.y + centerOffset, this.size, this.size);
+            }
+
+            appear() {
+                this.isIdle = false;
+                if (this.counter <= this.delay) {
+                    this.counter += this.counterStep;
+                    return;
+                }
+                if (this.size >= this.maxSize) {
+                    this.isShimmer = true;
+                }
+                if (this.isShimmer) {
+                    this.shimmer();
+                } else {
+                    this.size += this.sizeStep;
+                }
+                this.draw();
+            }
+
+            disappear() {
+                this.isShimmer = false;
+                this.counter = 0;
+                if (this.size <= 0) {
+                    this.isIdle = true;
+                    return;
+                } else {
+                    this.size -= 0.1;
+                }
+                this.draw();
+            }
+
+            shimmer() {
+                if (this.size >= this.maxSize) {
+                    this.isReverse = true;
+                } else if (this.size <= this.minSize) {
+                    this.isReverse = false;
+                }
+                if (this.isReverse) {
+                    this.size -= this.speed;
+                } else {
+                    this.size += this.speed;
+                }
+            }
+        }
+
+        // ========== PIXEL TRANSITION SYSTEM ==========
+        const pixelOverlay = document.getElementById('pixel-overlay');
+        const pixelCanvas = document.getElementById('pixel-canvas');
+        const transitionText = document.getElementById('transition-text');
+        let pixels = [];
+        let animationId = null;
+        let transitionCallback = null;
+
+        function initPixels() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const ctx = pixelCanvas.getContext('2d');
+
+            pixelCanvas.width = width;
+            pixelCanvas.height = height;
+
+            const colors = ['#1e90ff', '#0ea5e9', '#7dd3fc', '#ff0040', '#ffcc00', '#00ff00'];
+            const gap = 6;
+            const speed = 0.035;
+            pixels = [];
+
+            for (let x = 0; x < width; x += gap) {
+                for (let y = 0; y < height; y += gap) {
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+                    const dx = x - width / 2;
+                    const dy = y - height / 2;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    pixels.push(new Pixel(pixelCanvas, ctx, x, y, color, speed, distance * 0.5));
+                }
+            }
+        }
+
+        function animatePixels(fnName) {
+            const ctx = pixelCanvas.getContext('2d');
+            ctx.clearRect(0, 0, pixelCanvas.width, pixelCanvas.height);
+
+            let allIdle = true;
+            for (let i = 0; i < pixels.length; i++) {
+                pixels[i][fnName]();
+                if (!pixels[i].isIdle) {
+                    allIdle = false;
+                }
+            }
+
+            if (allIdle && fnName === 'disappear') {
+                cancelAnimationFrame(animationId);
+                pixelOverlay.classList.remove('active');
+                if (transitionCallback) transitionCallback();
+                return;
+            }
+
+            animationId = requestAnimationFrame(() => animatePixels(fnName));
+        }
+
+        function startPixelTransition(callback) {
+            transitionCallback = callback;
+            initPixels();
+            pixelOverlay.classList.add('active');
+            
+            // Start appearing animation
+            animatePixels('appear');
+
+            // Show "FIGHT!" text after pixels fill
+            setTimeout(() => {
+                transitionText.classList.add('show');
+            }, 800);
+
+            // Start disappearing and navigate after
+            setTimeout(() => {
+                transitionText.classList.remove('show');
+                cancelAnimationFrame(animationId);
+                // Reset pixels for disappear
+                pixels.forEach(p => { p.isIdle = false; p.isShimmer = false; });
+                animatePixels('disappear');
+            }, 2000);
+        }
+
+        // ========== SELECTION LOGIC ==========
+        let leftSelected = null;
+        let rightSelected = null;
+        const clickSound = document.getElementById('click-sound');
+
+        function playClick() {
+            clickSound.currentTime = 0;
+            clickSound.play().catch(() => { });
+        }
+
+        function selectLeft(player) {
+            playClick();
+            // Remove previous selection
+            document.querySelectorAll('#left-side .player-btn').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+
+            // Select new
+            const btn = document.querySelector(`#left-side .player-btn[data-player="${player}"]`);
+            btn.classList.add('selected');
+            leftSelected = player;
+
+            // Gray out on right side
+            document.querySelectorAll('#right-side .player-btn').forEach(btn => {
+                btn.classList.remove('disabled');
+            });
+            const rightBtn = document.querySelector(`#right-side .player-btn[data-player="${player}"]`);
+            rightBtn.classList.add('disabled');
+
+            // If right had the same selected, deselect it
+            if (rightSelected === player) {
+                rightSelected = null;
+                document.querySelectorAll('#right-side .player-btn').forEach(btn => {
+                    btn.classList.remove('selected');
+                });
+            }
+
+            updateDoneButton();
+        }
+
+        function selectRight(player) {
+            playClick();
+            // Remove previous selection
+            document.querySelectorAll('#right-side .player-btn').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+
+            // Select new
+            const btn = document.querySelector(`#right-side .player-btn[data-player="${player}"]`);
+            btn.classList.add('selected');
+            rightSelected = player;
+
+            updateDoneButton();
+        }
+
+        function updateDoneButton() {
+            const doneBtn = document.getElementById('done-btn');
+            if (leftSelected !== null && rightSelected !== null) {
+                doneBtn.classList.add('active');
+            } else {
+                doneBtn.classList.remove('active');
+            }
+        }
+
+        function startFight() {
+            if (leftSelected !== null && rightSelected !== null) {
+                playClick();
+                // Play bell sound
+                const bell = document.getElementById('bell-sound');
+                bell.play();
+
+                // Start pixel transition, then navigate
+                startPixelTransition(() => {
+                    window.location.href = `arena.html?p1=${leftSelected}&p2=${rightSelected}`;
+                });
+            }
+        }
+    </script>
+</body>
+
+</html>

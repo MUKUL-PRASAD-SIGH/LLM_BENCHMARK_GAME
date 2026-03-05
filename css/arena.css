@@ -1,0 +1,278 @@
+/* Arena Styles */
+.arena-container {
+    min-height: 100vh;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Health Section */
+.health-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #000 100%);
+}
+
+.health-bar-container {
+    width: 35%;
+}
+
+.health-bar-container.right {
+    text-align: right;
+}
+
+.player-name {
+    display: block;
+    font-size: 0.8rem;
+    margin-bottom: 8px;
+    color: #fff;
+}
+
+.health-bar {
+    height: 25px;
+    background: #333;
+    border: 3px solid #fff;
+    position: relative;
+    overflow: hidden;
+}
+
+.health-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(180deg, #00ff00 0%, #00cc00 50%, #009900 100%);
+    transition: width 0.3s ease;
+}
+
+.health-fill.low {
+    background: linear-gradient(180deg, #ff0000 0%, #cc0000 50%, #990000 100%);
+}
+
+.health-fill.medium {
+    background: linear-gradient(180deg, #ffff00 0%, #cccc00 50%, #999900 100%);
+}
+
+.timer {
+    font-size: 2rem;
+    color: #ffff00;
+    text-shadow: 2px 2px 0 #000;
+    min-width: 80px;
+    text-align: center;
+}
+
+/* Fight Arena */
+.fight-arena {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 400px;
+}
+
+.arena-bg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+}
+
+/* Fighter Container */
+.fighter-container {
+    position: absolute;
+    bottom: 50px;
+    z-index: 10;
+}
+
+#fighter1-container {
+    left: 15%;
+}
+
+#fighter2-container {
+    right: 15%;
+    transform: scaleX(-1);
+}
+
+/* Boxer/Fighter Styles */
+.boxer {
+    position: relative;
+    width: 100px;
+    height: 150px;
+}
+
+.boxer-body {
+    width: 60px;
+    height: 80px;
+    background: #ff6b6b;
+    position: absolute;
+    bottom: 30px;
+    left: 20px;
+    border-radius: 10px;
+}
+
+.boxer-head {
+    width: 50px;
+    height: 50px;
+    background: #ffd93d;
+    position: absolute;
+    bottom: 100px;
+    left: 25px;
+    border-radius: 50%;
+}
+
+.boxer-arm {
+    width: 20px;
+    height: 50px;
+    background: #ff6b6b;
+    position: absolute;
+    bottom: 60px;
+    border-radius: 10px;
+    transition: transform 0.1s;
+}
+
+.boxer-arm.left {
+    left: 0;
+    transform-origin: top center;
+}
+
+.boxer-arm.right {
+    right: 0;
+    transform-origin: top center;
+}
+
+.boxer-glove {
+    width: 25px;
+    height: 25px;
+    background: #c0392b;
+    position: absolute;
+    bottom: 25px;
+    border-radius: 50%;
+}
+
+.boxer-arm.left .boxer-glove {
+    left: -2px;
+}
+
+.boxer-arm.right .boxer-glove {
+    right: -2px;
+}
+
+.boxer-leg {
+    width: 20px;
+    height: 40px;
+    background: #3498db;
+    position: absolute;
+    bottom: 0;
+    border-radius: 5px;
+}
+
+.boxer-leg.left {
+    left: 25px;
+}
+
+.boxer-leg.right {
+    right: 25px;
+}
+
+/* Fighter Animations */
+.boxer.punching .boxer-arm.right {
+    transform: rotate(-90deg) translateX(30px);
+}
+
+.boxer.blocking {
+    filter: brightness(0.7);
+}
+
+.boxer.blocking .boxer-arm.left,
+.boxer.blocking .boxer-arm.right {
+    transform: rotate(-45deg);
+}
+
+.boxer.hit {
+    animation: hitFlash 0.2s;
+}
+
+@keyframes hitFlash {
+
+    0%,
+    100% {
+        filter: none;
+    }
+
+    50% {
+        filter: brightness(2) sepia(1) hue-rotate(-50deg);
+    }
+}
+
+.boxer.ducking {
+    transform: translateY(30px);
+}
+
+/* Controls Info */
+.controls-info {
+    display: flex;
+    justify-content: space-between;
+    padding: 15px 30px;
+    background: #111;
+    font-size: 0.6rem;
+}
+
+.controls-info h3 {
+    margin-bottom: 10px;
+    color: #ff6b6b;
+}
+
+.p2-controls h3 {
+    color: #6b9fff;
+}
+
+.controls-info p {
+    margin: 5px 0;
+    color: #888;
+}
+
+/* Victory Overlay */
+.victory-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+    z-index: 100;
+}
+
+.victory-overlay h1 {
+    font-size: 3rem;
+    color: #ffd93d;
+    text-shadow: 4px 4px 0 #ff0040;
+    animation: victoryPulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes victoryPulse {
+    from {
+        transform: scale(1);
+    }
+
+    to {
+        transform: scale(1.1);
+    }
+}
+
+.victory-overlay button {
+    background: #ff0040;
+    color: #fff;
+    border: 3px solid #fff;
+    margin: 10px;
+}
+
+.victory-overlay button:hover {
+    background: #ff3366;
+}

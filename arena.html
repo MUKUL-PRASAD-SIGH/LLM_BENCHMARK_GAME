@@ -1,0 +1,1978 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arena - LLM Fight Club</title>
+    <link rel="stylesheet" href="css/global.css">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #000;
+            overflow: hidden;
+            font-family: 'Press Start 2P', monospace;
+        }
+
+        .arena-container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Health Section */
+        .health-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: linear-gradient(180deg, #1a1a1a 0%, #000 100%);
+            z-index: 100;
+        }
+
+        .health-bar-container {
+            width: 38%;
+        }
+
+        .health-bar-container.right {
+            text-align: right;
+        }
+
+        .player-name {
+            display: block;
+            font-size: 10px;
+            margin-bottom: 6px;
+            color: #fff;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        .health-bar {
+            height: 22px;
+            background: #222;
+            border: 3px solid #fff;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .health-fill {
+            height: 100%;
+            width: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .health-fill.p1 {
+            background: linear-gradient(180deg, #00ff00 0%, #00cc00 50%, #009900 100%);
+        }
+
+        .health-fill.p2 {
+            background: linear-gradient(180deg, #ff6b6b 0%, #ff4040 50%, #cc0000 100%);
+        }
+
+        .health-fill.low {
+            background: linear-gradient(180deg, #ff0000 0%, #cc0000 50%, #990000 100%) !important;
+        }
+
+        .health-fill.medium {
+            background: linear-gradient(180deg, #ffff00 0%, #cccc00 50%, #999900 100%) !important;
+        }
+
+        .timer {
+            font-size: 24px;
+            color: #ffff00;
+            text-shadow: 2px 2px 0 #000;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        /* Fight Arena */
+        .fight-arena {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            min-height: 500px;
+        }
+
+        .arena-bg {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0;
+        }
+
+        /* Fighter Container */
+        .fighter-wrapper {
+            position: absolute;
+            bottom: 20px;
+            z-index: 10;
+            transition: left 0.05s linear, right 0.05s linear;
+        }
+
+        #fighter1-wrapper {
+            left: 15%;
+        }
+
+        #fighter2-wrapper {
+            right: 15%;
+        }
+
+        /* ========== FIGHTER STYLES ========== */
+        .fighter {
+            position: relative;
+            width: 80px;
+            height: 180px;
+            transform-origin: bottom center;
+            transform: scale(0.8);
+            filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.4));
+        }
+
+        .fighter.facing-left {
+            transform: scale(0.8) scaleX(-1);
+        }
+
+        .piece {
+            position: absolute;
+            transition: all 0.15s cubic-bezier(.34, 1.56, .64, 1);
+        }
+
+        /* ========== BASE STYLES (shared) ========== */
+        .neck {
+            width: 14px;
+            height: 10px;
+            top: 36px;
+            left: 33px;
+        }
+
+        .torso {
+            width: 42px;
+            height: 52px;
+            top: 46px;
+            left: 19px;
+            border-radius: 5px 5px 3px 3px;
+            border-bottom: none;
+            overflow: hidden;
+        }
+
+        .hips {
+            width: 46px;
+            height: 20px;
+            top: 98px;
+            left: 17px;
+            border-radius: 3px;
+        }
+
+        .arm-front,
+        .arm-back {
+            width: 15px;
+            height: 46px;
+            border-radius: 7px;
+            transform-origin: top center;
+            top: 50px;
+        }
+
+        .arm-front {
+            left: 14px;
+            z-index: 11;
+        }
+
+        .arm-back {
+            left: 51px;
+            z-index: 1;
+        }
+
+        .glove {
+            position: absolute;
+            width: 22px;
+            height: 20px;
+            border-radius: 7px 7px 5px 5px;
+            bottom: -13px;
+            left: -4px;
+        }
+
+        .leg-front,
+        .leg-back {
+            width: 17px;
+            height: 54px;
+            border-radius: 3px;
+            top: 118px;
+            transform-origin: top center;
+        }
+
+        .leg-front {
+            left: 21px;
+            z-index: 5;
+        }
+
+        .leg-back {
+            left: 42px;
+            z-index: 4;
+        }
+
+        .shoe {
+            position: absolute;
+            width: 25px;
+            height: 12px;
+            bottom: -5px;
+            left: -4px;
+            border-radius: 5px 6px 4px 4px;
+        }
+
+        /* ========== PLAYER 1 - Red Boxer ========== */
+        .fighter.player1 .head {
+            width: 34px;
+            height: 36px;
+            background: linear-gradient(160deg, #fddbb4 0%, #f0b880 100%);
+            top: 0;
+            left: 23px;
+            border-radius: 10px 10px 8px 8px;
+            z-index: 10;
+            box-shadow: inset -3px -3px 6px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .fighter.player1 .hair {
+            position: absolute;
+            width: 36px;
+            height: 15px;
+            background: linear-gradient(180deg, #241408 0%, #3d2210 100%);
+            top: -4px;
+            left: -1px;
+            border-radius: 10px 10px 0 0;
+        }
+
+        .fighter.player1 .eye {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #fff;
+            border-radius: 50%;
+            top: 16px;
+            left: 6px;
+            box-shadow: inset 0 0 0 2.5px #1a1a1a;
+        }
+
+        .fighter.player1 .eye::after {
+            content: '';
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: #111;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+        }
+
+        .fighter.player1 .ear {
+            position: absolute;
+            width: 8px;
+            height: 12px;
+            background: linear-gradient(180deg, #fddbb4, #e8a870);
+            border-radius: 50%;
+            top: 13px;
+            left: -5px;
+            z-index: -1;
+        }
+
+        .fighter.player1 .headband {
+            position: absolute;
+            width: 36px;
+            height: 7px;
+            background: linear-gradient(90deg, #c0304e, #e94560, #ff7088, #e94560, #c0304e);
+            top: 10px;
+            left: -1px;
+            border-radius: 2px;
+        }
+
+        .fighter.player1 .mouthguard {
+            position: absolute;
+            width: 18px;
+            height: 6px;
+            background: linear-gradient(180deg, #e94560, #b02040);
+            bottom: 5px;
+            left: 8px;
+            border-radius: 3px;
+        }
+
+        .fighter.player1 .neck {
+            background: linear-gradient(180deg, #f0b880, #e0a060);
+        }
+
+        .fighter.player1 .torso {
+            background: linear-gradient(160deg, #20244a 0%, #141830 100%);
+            border: 2px solid #e94560;
+        }
+
+        .fighter.player1 .torso::before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 12px;
+            background: linear-gradient(180deg, #f0b880, #e0a060);
+            top: 0;
+            left: 13px;
+            border-radius: 0 0 6px 6px;
+        }
+
+        .fighter.player1 .hips {
+            background: linear-gradient(180deg, #e94560 0%, #b02040 100%);
+        }
+
+        .fighter.player1 .arm-front {
+            background: linear-gradient(180deg, #fddbb4 0%, #e8a870 100%);
+        }
+
+        .fighter.player1 .arm-back {
+            background: linear-gradient(180deg, #e8c09a 0%, #d49060 100%);
+        }
+
+        .fighter.player1 .glove {
+            background: linear-gradient(150deg, #ff7088 0%, #e94560 45%, #b02040 100%);
+        }
+
+        .fighter.player1 .leg-front {
+            background: linear-gradient(180deg, #2050a0 0%, #163a70 100%);
+        }
+
+        .fighter.player1 .leg-back {
+            background: linear-gradient(180deg, #163a70 0%, #0e2a50 100%);
+        }
+
+        .fighter.player1 .shoe {
+            background: linear-gradient(160deg, #222, #111);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        .fighter.player1 .shoe::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, #c0304e, #e94560, #c0304e);
+            bottom: 0;
+            left: 0;
+            border-radius: 0 0 4px 4px;
+        }
+
+        /* ========== PLAYER 2 - Pink Boxer with BIG PUFFY HAIR ========== */
+        .fighter.player2 .head {
+            width: 34px;
+            height: 36px;
+            background: linear-gradient(160deg, #fddbb4 0%, #f0b880 100%);
+            top: 0;
+            left: 23px;
+            border-radius: 10px 10px 8px 8px;
+            z-index: 10;
+            box-shadow: inset -3px -3px 6px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .fighter.player2 .hair {
+            position: absolute;
+            width: 52px;
+            height: 38px;
+            background: linear-gradient(180deg, #ff69b4 0%, #ff1493 50%, #c71585 100%);
+            top: -20px;
+            left: -9px;
+            border-radius: 50% 50% 20% 20% / 60% 60% 20% 20%;
+            box-shadow: -6px 4px 0 2px #ff69b4, 6px 4px 0 2px #ff1493, 0 -6px 0 3px #ff85c8,
+                -10px -2px 0 0px #ff9ed5, 10px -2px 0 0px #e0107a;
+            z-index: 11;
+        }
+
+        .fighter.player2 .hair::before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 28px;
+            background: linear-gradient(180deg, #ff85c8, #ff1493);
+            border-radius: 50%;
+            top: 4px;
+            left: -12px;
+        }
+
+        .fighter.player2 .hair::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 28px;
+            background: linear-gradient(180deg, #ff85c8, #e0107a);
+            border-radius: 50%;
+            top: 4px;
+            right: -12px;
+        }
+
+        .fighter.player2 .eye {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #fff;
+            border-radius: 50%;
+            top: 16px;
+            left: 6px;
+            box-shadow: inset 0 0 0 2.5px #1a1a1a;
+        }
+
+        .fighter.player2 .eye::after {
+            content: '';
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: #111;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+        }
+
+        .fighter.player2 .ear {
+            position: absolute;
+            width: 8px;
+            height: 12px;
+            background: linear-gradient(180deg, #fddbb4, #e8a870);
+            border-radius: 50%;
+            top: 13px;
+            left: -5px;
+            z-index: -1;
+        }
+
+        .fighter.player2 .headband {
+            position: absolute;
+            width: 36px;
+            height: 7px;
+            background: linear-gradient(90deg, #ff1493, #ff69b4, #ffb6d9, #ff69b4, #ff1493);
+            top: 10px;
+            left: -1px;
+            border-radius: 2px;
+        }
+
+        .fighter.player2 .mouthguard {
+            position: absolute;
+            width: 18px;
+            height: 6px;
+            background: linear-gradient(180deg, #ff69b4, #c71585);
+            bottom: 5px;
+            left: 8px;
+            border-radius: 3px;
+        }
+
+        .fighter.player2 .neck {
+            background: linear-gradient(180deg, #f0b880, #e0a060);
+        }
+
+        .fighter.player2 .torso {
+            background: linear-gradient(160deg, #ff1493 0%, #c71585 100%);
+            border: 2px solid #ffb6d9;
+        }
+
+        .fighter.player2 .torso::before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 12px;
+            background: linear-gradient(180deg, #f0b880, #e0a060);
+            top: 0;
+            left: 13px;
+            border-radius: 0 0 6px 6px;
+        }
+
+        .fighter.player2 .hips {
+            background: linear-gradient(180deg, #ff69b4 0%, #ff1493 100%);
+        }
+
+        .fighter.player2 .arm-front {
+            background: linear-gradient(180deg, #fddbb4 0%, #e8a870 100%);
+        }
+
+        .fighter.player2 .arm-back {
+            background: linear-gradient(180deg, #e8c09a 0%, #d49060 100%);
+        }
+
+        .fighter.player2 .glove {
+            background: linear-gradient(150deg, #ffb6d9 0%, #ff69b4 45%, #ff1493 100%);
+            box-shadow: 0 4px 10px rgba(255, 105, 180, 0.6);
+        }
+
+        .fighter.player2 .leg-front {
+            background: linear-gradient(180deg, #fddbb4 0%, #e8a870 100%);
+        }
+
+        .fighter.player2 .leg-back {
+            background: linear-gradient(180deg, #e8c09a 0%, #d49060 100%);
+        }
+
+        .fighter.player2 .shoe {
+            background: linear-gradient(160deg, #fff, #f0e0f0);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        .fighter.player2 .shoe::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, #ff1493, #ff69b4, #ff1493);
+            bottom: 0;
+            left: 0;
+            border-radius: 0 0 4px 4px;
+        }
+
+        /* ========== PLAYER 3 - DEMON with HORNS ========== */
+        .fighter.player3 .head {
+            width: 34px;
+            height: 36px;
+            background: linear-gradient(160deg, #2a1a3e 0%, #1a0a2a 100%);
+            top: 0;
+            left: 23px;
+            border-radius: 10px 10px 8px 8px;
+            z-index: 10;
+            box-shadow: inset -3px -3px 6px rgba(0, 0, 0, 0.4), 0 3px 10px rgba(0, 0, 0, 0.6), 0 0 8px rgba(120, 0, 255, 0.3);
+        }
+
+        /* HORNS using CSS triangles */
+        .fighter.player3 .hair {
+            position: absolute;
+            width: 36px;
+            height: 10px;
+            background: transparent;
+            top: -22px;
+            left: -1px;
+            z-index: 15;
+        }
+
+        .fighter.player3 .hair::before {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 28px solid #4a0080;
+            top: 0;
+            left: 2px;
+            filter: drop-shadow(-2px -4px 6px rgba(160, 32, 240, 0.7));
+            transform: rotate(-12deg);
+        }
+
+        .fighter.player3 .hair::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 28px solid #4a0080;
+            top: 0;
+            right: 2px;
+            filter: drop-shadow(2px -4px 6px rgba(160, 32, 240, 0.7));
+            transform: rotate(12deg);
+        }
+
+        /* Glowing red demon eye */
+        .fighter.player3 .eye {
+            position: absolute;
+            width: 10px;
+            height: 7px;
+            background: #ff0040;
+            border-radius: 50%;
+            top: 15px;
+            left: 5px;
+            box-shadow: 0 0 6px #ff0040, 0 0 12px rgba(255, 0, 64, 0.8);
+        }
+
+        .fighter.player3 .eye::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #200010;
+            border-radius: 50%;
+            top: 1px;
+            left: 3px;
+        }
+
+        /* Pointed demon ear */
+        .fighter.player3 .ear {
+            position: absolute;
+            width: 8px;
+            height: 14px;
+            top: 10px;
+            left: -5px;
+            z-index: -1;
+            clip-path: polygon(0% 100%, 50% 0%, 100% 100%);
+            background: #3a0060;
+        }
+
+        .fighter.player3 .headband {
+            position: absolute;
+            width: 36px;
+            height: 7px;
+            background: linear-gradient(90deg, #1a0030, #4a0080, #6600cc, #4a0080, #1a0030);
+            top: 10px;
+            left: -1px;
+            border-radius: 2px;
+            box-shadow: 0 0 6px rgba(100, 0, 200, 0.8);
+        }
+
+        .fighter.player3 .mouthguard {
+            position: absolute;
+            width: 18px;
+            height: 6px;
+            background: linear-gradient(180deg, #3a0060, #1a0030);
+            bottom: 5px;
+            left: 8px;
+            border-radius: 3px;
+            box-shadow: 0 0 4px rgba(100, 0, 200, 0.6);
+        }
+
+        .fighter.player3 .neck {
+            background: linear-gradient(180deg, #2a1a3e, #1a0a2a);
+        }
+
+        .fighter.player3 .torso {
+            background: linear-gradient(160deg, #0d0030 0%, #06001a 100%);
+            border: 2px solid #5500aa;
+            box-shadow: 0 0 10px rgba(80, 0, 180, 0.3);
+        }
+
+        .fighter.player3 .torso::before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 12px;
+            background: linear-gradient(180deg, #2a1a3e, #1a0a2a);
+            top: 0;
+            left: 13px;
+            border-radius: 0 0 6px 6px;
+        }
+
+        .fighter.player3 .torso::after {
+            content: '';
+            position: absolute;
+            width: 3px;
+            height: 28px;
+            background: linear-gradient(180deg, rgba(120, 0, 255, 0.9), rgba(60, 0, 180, 0.2));
+            top: 14px;
+            left: 18px;
+            border-radius: 2px;
+            box-shadow: 0 0 6px rgba(120, 0, 255, 0.8);
+        }
+
+        .fighter.player3 .hips {
+            background: linear-gradient(180deg, #1a0040 0%, #0a0020 100%);
+            border: 1px solid #3a0070;
+            box-shadow: 0 0 8px rgba(80, 0, 180, 0.3);
+        }
+
+        .fighter.player3 .arm-front {
+            background: linear-gradient(180deg, #2a1a3e 0%, #1a0a28 100%);
+            box-shadow: 0 0 6px rgba(80, 0, 180, 0.2);
+        }
+
+        .fighter.player3 .arm-back {
+            background: linear-gradient(180deg, #200d30 0%, #120820 100%);
+        }
+
+        .fighter.player3 .glove {
+            background: linear-gradient(150deg, #5500aa 0%, #3a0080 45%, #1a0040 100%);
+            box-shadow: 0 4px 12px rgba(80, 0, 180, 0.7), 0 0 10px rgba(120, 0, 255, 0.4);
+        }
+
+        .fighter.player3 .leg-front {
+            background: linear-gradient(180deg, #2a1a3e 0%, #1a0a28 100%);
+        }
+
+        .fighter.player3 .leg-back {
+            background: linear-gradient(180deg, #200d30 0%, #120820 100%);
+        }
+
+        .fighter.player3 .shoe {
+            background: linear-gradient(160deg, #0d0020, #060010);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.8), 0 0 8px rgba(80, 0, 180, 0.3);
+        }
+
+        .fighter.player3 .shoe::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, #3a0080, #7700cc, #3a0080);
+            bottom: 0;
+            left: 0;
+            border-radius: 0 0 4px 4px;
+            box-shadow: 0 0 6px rgba(120, 0, 255, 0.8);
+        }
+
+        /* ========== PLAYER 4 - VAMPIRE with LONG WHITE HAIR ========== */
+        .fighter.player4 {
+            height: 190px;
+        }
+
+        .fighter.player4 .head {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(160deg, #e8d8c0 0%, #d4c0a0 100%);
+            top: 2px;
+            left: 24px;
+            border-radius: 4px 4px 3px 3px;
+            z-index: 10;
+            box-shadow: inset -2px -2px 4px rgba(0, 0, 0, 0.2), 0 0 0 2px #111, 0 3px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Long flowing white hair */
+        .fighter.player4 .hair {
+            position: absolute;
+            width: 50px;
+            height: 90px;
+            background: linear-gradient(180deg, #f0f0f0 0%, #d8d8d8 40%, #b0b0b0 80%, #888 100%);
+            top: -14px;
+            left: -9px;
+            border-radius: 22px 22px 12px 14px;
+            z-index: 9;
+            box-shadow: 3px 4px 10px rgba(0, 0, 0, 0.5), 0 0 0 2px #111;
+        }
+
+        .fighter.player4 .hair::before {
+            content: '';
+            position: absolute;
+            width: 6px;
+            height: 70px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.0));
+            top: 8px;
+            left: 10px;
+            border-radius: 4px;
+        }
+
+        .fighter.player4 .hair::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 60px;
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.4), rgba(150, 150, 150, 0.1));
+            top: 14px;
+            right: 2px;
+            border-radius: 8px;
+        }
+
+        /* Dark mask on face */
+        .fighter.player4 .mask {
+            position: absolute;
+            width: 30px;
+            height: 14px;
+            background: linear-gradient(180deg, rgba(20, 10, 10, 0.85), rgba(40, 10, 10, 0.6));
+            top: 0;
+            left: 1px;
+            border-radius: 3px 3px 0 0;
+            z-index: 11;
+        }
+
+        .fighter.player4 .mask::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: rgba(180, 30, 30, 0.8);
+            bottom: 0;
+            left: 0;
+        }
+
+        /* Glowing peek-eye */
+        .fighter.player4 .peek-eye {
+            position: absolute;
+            width: 12px;
+            height: 8px;
+            background: radial-gradient(ellipse at center, #ffffff 0%, #ffcccc 40%, #ff2222 100%);
+            border-radius: 50%;
+            top: 20px;
+            left: 0px;
+            z-index: 12;
+            box-shadow:
+                0 0 6px 2px rgba(255, 50, 50, 0.9),
+                0 0 14px 4px rgba(200, 20, 20, 0.7),
+                0 0 28px 8px rgba(180, 0, 0, 0.4);
+            animation: eyeGlow 2.8s ease-in-out infinite;
+        }
+
+        .fighter.player4 .peek-eye::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #2a0000;
+            border-radius: 50%;
+            top: 2px;
+            left: 4px;
+        }
+
+        @keyframes eyeGlow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 6px 2px rgba(255, 50, 50, 0.9), 0 0 14px 4px rgba(200, 20, 20, 0.7), 0 0 28px 8px rgba(180, 0, 0, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 10px 4px rgba(255, 80, 80, 1), 0 0 22px 8px rgba(220, 30, 30, 0.9), 0 0 40px 14px rgba(200, 0, 0, 0.6);
+            }
+        }
+
+        .fighter.player4 .eye {
+            display: none;
+        }
+
+        .fighter.player4 .ear {
+            position: absolute;
+            width: 7px;
+            height: 10px;
+            background: linear-gradient(180deg, #e8d8c0, #d4c0a0);
+            border-radius: 50%;
+            top: 10px;
+            left: -4px;
+            z-index: -1;
+            box-shadow: 0 0 0 1px #333;
+        }
+
+        .fighter.player4 .headband {
+            display: none;
+        }
+
+        .fighter.player4 .mouthguard {
+            display: none;
+        }
+
+        .fighter.player4 .neck {
+            background: linear-gradient(180deg, #d4c0a0, #c0aa88);
+            box-shadow: 0 0 0 1px #222;
+            top: 34px;
+            left: 34px;
+            width: 12px;
+        }
+
+        .fighter.player4 .torso {
+            background: linear-gradient(160deg, #1a1a22 0%, #0e0e16 100%);
+            border: 2px solid #2a2a38;
+            top: 44px;
+        }
+
+        .fighter.player4 .torso::before {
+            content: '';
+            position: absolute;
+            width: 42px;
+            height: 8px;
+            background: linear-gradient(90deg, #8a0a0a, #cc1111, #8a0a0a);
+            top: 0;
+            left: -2px;
+        }
+
+        .fighter.player4 .torso::after {
+            content: '';
+            position: absolute;
+            width: 2px;
+            height: 35px;
+            background: linear-gradient(180deg, rgba(180, 30, 30, 0.5), rgba(180, 30, 30, 0.05));
+            top: 8px;
+            left: 18px;
+            border-radius: 2px;
+        }
+
+        .fighter.player4 .hips {
+            background: linear-gradient(180deg, #cc1111 0%, #8a0808 100%);
+            top: 96px;
+            height: 16px;
+            box-shadow: 0 0 0 1px #3a0808;
+        }
+
+        .fighter.player4 .hips::after {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: linear-gradient(135deg, #ffd700, #cc9900);
+            border-radius: 2px;
+            top: 3px;
+            left: 18px;
+            box-shadow: 0 0 4px rgba(220, 170, 0, 0.5);
+        }
+
+        .fighter.player4 .arm-front {
+            background: linear-gradient(180deg, #1a1a22 0%, #111118 100%);
+            border: 1px solid #2a2a38;
+            width: 14px;
+            height: 44px;
+        }
+
+        .fighter.player4 .arm-back {
+            background: linear-gradient(180deg, #141418 0%, #0c0c12 100%);
+            border: 1px solid #222;
+            width: 14px;
+            height: 44px;
+            left: 52px;
+        }
+
+        .fighter.player4 .glove {
+            background: linear-gradient(150deg, #cc2222 0%, #991111 45%, #660808 100%);
+            box-shadow: 0 4px 14px rgba(180, 20, 20, 0.7), 0 0 0 1px #3a0808;
+        }
+
+        .fighter.player4 .leg-front {
+            background: linear-gradient(180deg, #1a1a22 0%, #0e0e18 100%);
+            border: 1px solid #2a2a38;
+            top: 112px;
+            height: 58px;
+        }
+
+        .fighter.player4 .leg-front::before {
+            content: '';
+            position: absolute;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(180deg, #cc1111, #440000);
+            right: 3px;
+            top: 0;
+        }
+
+        .fighter.player4 .leg-back {
+            background: linear-gradient(180deg, #141418 0%, #0c0c14 100%);
+            border: 1px solid #1e1e28;
+            top: 112px;
+            height: 58px;
+        }
+
+        .fighter.player4 .leg-back::before {
+            content: '';
+            position: absolute;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(180deg, #cc1111, #440000);
+            right: 3px;
+            top: 0;
+        }
+
+        .fighter.player4 .shoe {
+            background: linear-gradient(160deg, #1a1a22, #111118);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6), 0 0 0 1px #2a2a3a;
+            width: 26px;
+            left: -5px;
+            bottom: -4px;
+        }
+
+        .fighter.player4 .shoe::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, #8a0808, #cc1111, #8a0808);
+            bottom: 0;
+            left: 0;
+            border-radius: 0 0 4px 4px;
+        }
+
+        /* Hide player 4 specific elements for other players */
+        .fighter.player1 .mask,
+        .fighter.player1 .peek-eye,
+        .fighter.player2 .mask,
+        .fighter.player2 .peek-eye,
+        .fighter.player3 .mask,
+        .fighter.player3 .peek-eye {
+            display: none;
+        }
+
+        /* ========== FIGHTER ANIMATIONS ========== */
+        .fighter.idle {
+            animation: breathe 2.4s ease-in-out infinite;
+        }
+
+        @keyframes breathe {
+
+            0%,
+            100% {
+                transform: scale(0.8) translateY(0);
+            }
+
+            50% {
+                transform: scale(0.8) translateY(-4px);
+            }
+        }
+
+        .fighter.facing-left.idle {
+            animation: breatheFlip 2.4s ease-in-out infinite;
+        }
+
+        @keyframes breatheFlip {
+
+            0%,
+            100% {
+                transform: scale(0.8) scaleX(-1) translateY(0);
+            }
+
+            50% {
+                transform: scale(0.8) scaleX(-1) translateY(-4px);
+            }
+        }
+
+        /* Boxing */
+        .fighter.boxing .arm-front {
+            animation: punch-front 0.4s ease-in-out;
+        }
+
+        @keyframes punch-front {
+            0% {
+                transform: rotate(-10deg);
+            }
+
+            40% {
+                transform: rotate(-95deg);
+            }
+
+            100% {
+                transform: rotate(-10deg);
+            }
+        }
+
+        /* Kicking */
+        .fighter.kicking .leg-front {
+            animation: kick-front 0.5s ease-in-out;
+        }
+
+        @keyframes kick-front {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            40% {
+                transform: rotate(-100deg) translateX(8px);
+            }
+
+            100% {
+                transform: rotate(0deg);
+            }
+        }
+
+        /* Defend */
+        .fighter.defend .arm-front {
+            transform: rotate(-50deg);
+        }
+
+        .fighter.defend .arm-back {
+            transform: rotate(50deg);
+        }
+
+        /* Duck */
+        .fighter.duck {
+            transform: scale(0.8) scaleY(0.7) translateY(50px);
+        }
+
+        .fighter.facing-left.duck {
+            transform: scale(0.8) scaleX(-1) scaleY(0.7) translateY(50px);
+        }
+
+        /* Hit effect */
+        .fighter.hit {
+            animation: hitShake 0.3s ease-out;
+            filter: brightness(2) drop-shadow(0 0 20px #fff);
+        }
+
+        @keyframes hitShake {
+
+            0%,
+            100% {
+                transform: scale(0.8) translateX(0);
+            }
+
+            25% {
+                transform: scale(0.8) translateX(-10px);
+            }
+
+            75% {
+                transform: scale(0.8) translateX(10px);
+            }
+        }
+
+        .fighter.facing-left.hit {
+            animation: hitShakeFlip 0.3s ease-out;
+        }
+
+        @keyframes hitShakeFlip {
+
+            0%,
+            100% {
+                transform: scale(0.8) scaleX(-1) translateX(0);
+            }
+
+            25% {
+                transform: scale(0.8) scaleX(-1) translateX(-10px);
+            }
+
+            75% {
+                transform: scale(0.8) scaleX(-1) translateX(10px);
+            }
+        }
+
+        /* Victory */
+        .fighter.victory,
+        .fighter.player1.victory,
+        .fighter.player2.victory,
+        .fighter.player3.victory,
+        .fighter.player4.victory {
+            animation: victoryBounce 0.6s ease infinite alternate !important;
+        }
+
+        .fighter.victory .arm-front {
+            transform: rotate(-160deg);
+        }
+
+        .fighter.victory .arm-back {
+            transform: rotate(160deg);
+        }
+
+        @keyframes victoryBounce {
+            from {
+                transform: scale(0.8) translateY(0);
+            }
+
+            to {
+                transform: scale(0.8) translateY(-15px);
+            }
+        }
+
+        .fighter.facing-left.victory,
+        .fighter.player1.facing-left.victory,
+        .fighter.player2.facing-left.victory,
+        .fighter.player3.facing-left.victory,
+        .fighter.player4.facing-left.victory {
+            animation: victoryBounceFlip 0.6s ease infinite alternate !important;
+        }
+
+        @keyframes victoryBounceFlip {
+            from {
+                transform: scale(0.8) scaleX(-1) translateY(0);
+            }
+
+            to {
+                transform: scale(0.8) scaleX(-1) translateY(-15px);
+            }
+        }
+
+        /* Defeated - fall horizontally */
+        .fighter.defeated,
+        .fighter.player1.defeated,
+        .fighter.player2.defeated,
+        .fighter.player3.defeated,
+        .fighter.player4.defeated {
+            animation: fallDown 0.5s ease-out forwards !important;
+            transform-origin: bottom center;
+        }
+
+        @keyframes fallDown {
+            0% {
+                transform: scale(0.8) rotate(0deg);
+            }
+
+            100% {
+                transform: scale(0.8) rotate(90deg) translateY(40px);
+            }
+        }
+
+        .fighter.facing-left.defeated,
+        .fighter.player1.facing-left.defeated,
+        .fighter.player2.facing-left.defeated,
+        .fighter.player3.facing-left.defeated,
+        .fighter.player4.facing-left.defeated {
+            animation: fallDownFlip 0.5s ease-out forwards !important;
+            transform-origin: bottom center;
+        }
+
+        @keyframes fallDownFlip {
+            0% {
+                transform: scale(0.8) scaleX(-1) rotate(0deg);
+            }
+
+            100% {
+                transform: scale(0.8) scaleX(-1) rotate(-90deg) translateY(40px);
+            }
+        }
+
+        /* Sparkle effect */
+        .sparkle {
+            position: absolute;
+            pointer-events: none;
+            animation: sparkleFly var(--dur, 1.4s) ease-out forwards;
+            z-index: 99;
+            font-size: 20px;
+        }
+
+        @keyframes sparkleFly {
+            0% {
+                opacity: 1;
+                transform: translate(0, 0) scale(1) rotate(0deg);
+            }
+
+            60% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+                transform: translate(var(--tx), var(--ty)) scale(0.3) rotate(var(--rot));
+            }
+        }
+
+        /* Hit effect overlay */
+        .hit-effect {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            background: radial-gradient(circle, #fff 0%, #ff0 30%, transparent 70%);
+            border-radius: 50%;
+            z-index: 20;
+            animation: hitBurst 0.3s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes hitBurst {
+            0% {
+                transform: scale(0);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+
+        /* Controls Info */
+        .controls-info {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 30px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #888;
+            font-size: 8px;
+            z-index: 100;
+        }
+
+        .controls-info h3 {
+            color: #fff;
+            margin-bottom: 5px;
+            font-size: 10px;
+        }
+
+        .controls-info p {
+            margin: 2px 0;
+        }
+
+        /* Victory Overlay */
+        .victory-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .victory-overlay h1 {
+            font-size: 32px;
+            color: #ffcc00;
+            text-shadow: 4px 4px 0 #000, 0 0 30px rgba(255, 204, 0, 0.8);
+            margin-bottom: 30px;
+            animation: victoryPulse 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes victoryPulse {
+            from {
+                transform: scale(1);
+            }
+
+            to {
+                transform: scale(1.1);
+            }
+        }
+
+        .victory-overlay button {
+            background: #22aa22;
+            border: 4px solid #115511;
+            padding: 12px 30px;
+            margin: 10px;
+            cursor: pointer;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 12px;
+            color: #fff;
+            text-shadow: 2px 2px 0 #000;
+            transition: all 0.2s ease;
+        }
+
+        .victory-overlay button:hover {
+            background: #33cc33;
+            transform: scale(1.05);
+        }
+
+        .victory-overlay button:disabled {
+            background: #555;
+            border-color: #333;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .victory-overlay button:disabled:hover {
+            transform: none;
+            background: #555;
+        }
+
+        /* Round indicator */
+        .round-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            color: #fff;
+            text-shadow: 4px 4px 0 #000, 0 0 40px rgba(255, 255, 255, 0.8);
+            z-index: 500;
+            animation: roundFade 2s ease-out forwards;
+        }
+
+        @keyframes roundFade {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(2);
+            }
+
+            20% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            80% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="arena-container">
+        <!-- Health Bars -->
+        <div class="health-section">
+            <div class="health-bar-container left">
+                <span class="player-name" id="p1-name">PLAYER 1</span>
+                <div class="health-bar">
+                    <div class="health-fill p1" id="p1-health"></div>
+                </div>
+            </div>
+            <div class="timer" id="timer">99</div>
+            <div class="health-bar-container right">
+                <span class="player-name" id="p2-name">PLAYER 2</span>
+                <div class="health-bar">
+                    <div class="health-fill p2" id="p2-health"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fight Arena -->
+        <div class="fight-arena" id="fight-arena">
+            <img src="assets/images/arena/pixel arena.jpg" alt="Arena" class="arena-bg">
+
+            <!-- Fighter 1 -->
+            <div class="fighter-wrapper" id="fighter1-wrapper">
+                <div class="fighter player1 idle" id="fighter1">
+                    <div class="piece leg-back">
+                        <div class="shoe"></div>
+                    </div>
+                    <div class="piece arm-back">
+                        <div class="glove"></div>
+                    </div>
+                    <div class="piece hips"></div>
+                    <div class="piece torso"></div>
+                    <div class="piece neck"></div>
+                    <div class="piece head">
+                        <div class="hair"></div>
+                        <div class="headband"></div>
+                        <div class="ear"></div>
+                        <div class="eye"></div>
+                        <div class="mouthguard"></div>
+                        <div class="mask"></div>
+                        <div class="peek-eye"></div>
+                    </div>
+                    <div class="piece leg-front">
+                        <div class="shoe"></div>
+                    </div>
+                    <div class="piece arm-front">
+                        <div class="glove"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fighter 2 -->
+            <div class="fighter-wrapper" id="fighter2-wrapper">
+                <div class="fighter player2 idle facing-left" id="fighter2">
+                    <div class="piece leg-back">
+                        <div class="shoe"></div>
+                    </div>
+                    <div class="piece arm-back">
+                        <div class="glove"></div>
+                    </div>
+                    <div class="piece hips"></div>
+                    <div class="piece torso"></div>
+                    <div class="piece neck"></div>
+                    <div class="piece head">
+                        <div class="hair"></div>
+                        <div class="headband"></div>
+                        <div class="ear"></div>
+                        <div class="eye"></div>
+                        <div class="mouthguard"></div>
+                        <div class="mask"></div>
+                        <div class="peek-eye"></div>
+                    </div>
+                    <div class="piece leg-front">
+                        <div class="shoe"></div>
+                    </div>
+                    <div class="piece arm-front">
+                        <div class="glove"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Round indicator -->
+            <div class="round-indicator" id="round-indicator" style="display: none;">FIGHT!</div>
+        </div>
+
+        <!-- Controls Info -->
+        <div class="controls-info">
+            <div class="p1-controls">
+                <h3>Player 1</h3>
+                <p>A/D - Move</p>
+                <p>S - Duck</p>
+                <p>F - Punch | G - Kick</p>
+                <p>SPACE - Block</p>
+            </div>
+            <div class="p2-controls">
+                <h3>Player 2</h3>
+                <p>←/→ - Move</p>
+                <p>↓ - Duck</p>
+                <p>L - Punch | K - Kick</p>
+                <p>ENTER - Block</p>
+            </div>
+        </div>
+
+        <!-- Victory Overlay -->
+        <div class="victory-overlay" id="victory-overlay" style="display: none;">
+            <h1 id="winner-text">WINNER!</h1>
+            <button onclick="location.href='select.html'">REMATCH</button>
+            <button onclick="location.href='index.html'">MAIN MENU</button>
+        </div>
+    </div>
+
+    <!-- Audio -->
+    <audio id="bell-sound" src="assets/sounds/bell.mp3"></audio>
+    <audio id="hit-sound" src="assets/sounds/hit.mp3"></audio>
+    <audio id="kick-sound" src="assets/sounds/kick.mp3"></audio>
+    <audio id="thud-sound" src="assets/sounds/thud.mp3"></audio>
+    <audio id="win-sound" src="assets/sounds/win.mp3"></audio>
+
+    <script>
+        // ============ HIT DISTANCE CONFIG ============
+        const PUNCH_RANGE = 170;  // pixels - must be within this distance to land a punch
+        const KICK_RANGE = 170;   // pixels - must be within this distance to land a kick
+        const PUNCH_DAMAGE = 8;
+        const KICK_DAMAGE = 15;
+        const BLOCK_REDUCTION = 0.2; // blocked attacks do 20% damage
+        const PUSH_DISTANCE = 25;    // pixels to push opponent when colliding
+
+        // Game state
+        const gameState = {
+            p1: {
+                health: 100,
+                x: 200,
+                isBlocking: false,
+                isDucking: false,
+                isAttacking: false,
+                lastAttack: 0
+            },
+            p2: {
+                health: 100,
+                x: 600,
+                isBlocking: false,
+                isDucking: false,
+                isAttacking: false,
+                lastAttack: 0
+            },
+            timer: 99,
+            gameOver: false
+        };
+
+        // Get selected players from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const p1Selection = urlParams.get('p1') || '1';
+        const p2Selection = urlParams.get('p2') || '2';
+
+        // DOM elements
+        const fighter1 = document.getElementById('fighter1');
+        const fighter2 = document.getElementById('fighter2');
+        const fighter1Wrapper = document.getElementById('fighter1-wrapper');
+        const fighter2Wrapper = document.getElementById('fighter2-wrapper');
+        const p1HealthBar = document.getElementById('p1-health');
+        const p2HealthBar = document.getElementById('p2-health');
+        const p1NameEl = document.getElementById('p1-name');
+        const p2NameEl = document.getElementById('p2-name');
+        const timerEl = document.getElementById('timer');
+        const victoryOverlay = document.getElementById('victory-overlay');
+        const winnerText = document.getElementById('winner-text');
+        const roundIndicator = document.getElementById('round-indicator');
+        const bellSound = document.getElementById('bell-sound');
+        const hitSound = document.getElementById('hit-sound');
+        const kickSound = document.getElementById('kick-sound');
+        const fightArena = document.getElementById('fight-arena');
+
+        // Calculate distance between fighters
+        function getDistance() {
+            return Math.abs(gameState.p1.x - gameState.p2.x);
+        }
+
+        // Initialize game
+        function initGame() {
+            // Set player classes based on selection
+            fighter1.className = `fighter player${p1Selection} idle`;
+            fighter2.className = `fighter player${p2Selection} idle facing-left`;
+
+            // Set player names
+            p1NameEl.textContent = `PLAYER ${p1Selection}`;
+            p2NameEl.textContent = `PLAYER ${p2Selection}`;
+
+            // Set initial positions
+            gameState.p1.x = fightArena.offsetWidth * 0.2;
+            gameState.p2.x = fightArena.offsetWidth * 0.8;
+            updateFighterPositions();
+
+            // Play bell sound
+            bellSound.volume = 0.8;
+            bellSound.play().catch(e => {
+                document.body.addEventListener('click', () => bellSound.play(), { once: true });
+            });
+
+            // Show FIGHT indicator
+            roundIndicator.style.display = 'block';
+            setTimeout(() => roundIndicator.style.display = 'none', 2000);
+
+            // Start timer
+            startTimer();
+
+            // Start game loop
+            gameLoop();
+        }
+
+        function updateFighterPositions() {
+            fighter1Wrapper.style.left = `${gameState.p1.x}px`;
+            fighter2Wrapper.style.left = `${gameState.p2.x - 64}px`; // offset for scaled fighter width (80 * 0.8)
+        }
+
+        // Timer
+        let timerInterval;
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                if (gameState.gameOver) return;
+
+                gameState.timer--;
+                timerEl.textContent = gameState.timer.toString().padStart(2, '0');
+
+                if (gameState.timer <= 0) {
+                    clearInterval(timerInterval);
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        // Update health bars
+        function updateHealthBars() {
+            p1HealthBar.style.width = `${gameState.p1.health}%`;
+            p2HealthBar.style.width = `${gameState.p2.health}%`;
+
+            // Update colors
+            [{ el: p1HealthBar, health: gameState.p1.health },
+            { el: p2HealthBar, health: gameState.p2.health }].forEach(({ el, health }) => {
+                el.classList.remove('low', 'medium');
+                if (health <= 25) el.classList.add('low');
+                else if (health <= 50) el.classList.add('medium');
+            });
+        }
+
+        // Attack functions
+        function attack(attacker, defender, attackerEl, defenderEl, defenderWrapper, damage, range, isKick) {
+            const distance = getDistance();
+
+            // Check if within range
+            if (distance <= range) {
+                let actualDamage = damage;
+
+                // Check if defender is blocking - blocks ALL attacks (punches and kicks)
+                if (defender.isBlocking) {
+                    actualDamage = 0; // Full block protection
+                }
+
+                // Check if defender is ducking (punches miss ducking opponents, kicks still hit)
+                if (defender.isDucking && !isKick) {
+                    actualDamage = 0;
+                }
+
+                if (actualDamage > 0) {
+                    defender.health = Math.max(0, defender.health - actualDamage);
+                    updateHealthBars();
+
+                    // Play sound
+                    const sound = isKick ? kickSound : hitSound;
+                    sound.currentTime = 0;
+                    sound.play();
+
+                    // Show hit effect on defender
+                    showHitEffect(defenderWrapper);
+                    defenderEl.classList.remove('idle');
+                    defenderEl.classList.add('hit');
+                    setTimeout(() => {
+                        defenderEl.classList.remove('hit');
+                        if (!defender.isBlocking && !defender.isDucking) {
+                            defenderEl.classList.add('idle');
+                        }
+                    }, 300);
+
+                    // Check for KO
+                    if (defender.health <= 0) {
+                        endGame();
+                    }
+                }
+            }
+        }
+
+        function showHitEffect(wrapper) {
+            const effect = document.createElement('div');
+            effect.className = 'hit-effect';
+            effect.style.left = '20px';
+            effect.style.top = '50px';
+            wrapper.appendChild(effect);
+            setTimeout(() => effect.remove(), 300);
+        }
+
+        // Set fighter state
+        function setFighterState(fighterEl, state, player) {
+            const isFacingLeft = fighterEl.classList.contains('facing-left');
+            fighterEl.className = `fighter player${player} ${state}`;
+            if (isFacingLeft) fighterEl.classList.add('facing-left');
+        }
+
+        // Sparkle emojis for victory
+        const SPARKLES = ['✨', '⭐', '💫', '🌟', '✦', '★'];
+        let sparkleInterval = null;
+
+        function spawnSparkle(wrapperEl) {
+            const el = document.createElement('span');
+            el.className = 'sparkle';
+            el.textContent = SPARKLES[Math.floor(Math.random() * SPARKLES.length)];
+
+            const x = Math.random() * 80 - 20;
+            const y = Math.random() * 180;
+            const tx = (Math.random() - 0.5) * 120 + 'px';
+            const ty = -(30 + Math.random() * 100) + 'px';
+            const rot = (Math.random() * 360) + 'deg';
+            const dur = (0.8 + Math.random() * 0.8) + 's';
+
+            el.style.cssText = `left:${x}px;top:${y}px;--tx:${tx};--ty:${ty};--rot:${rot};--dur:${dur};`;
+            wrapperEl.appendChild(el);
+            setTimeout(() => el.remove(), parseFloat(dur) * 1000 + 100);
+        }
+
+        function startVictorySparkles(wrapperEl) {
+            // Initial burst
+            for (let i = 0; i < 10; i++) {
+                setTimeout(() => spawnSparkle(wrapperEl), i * 70);
+            }
+            // Continuous sparkles
+            sparkleInterval = setInterval(() => spawnSparkle(wrapperEl), 150);
+        }
+
+        function stopVictorySparkles() {
+            if (sparkleInterval) {
+                clearInterval(sparkleInterval);
+                sparkleInterval = null;
+            }
+            document.querySelectorAll('.sparkle').forEach(s => s.remove());
+        }
+
+        // End game
+        function endGame() {
+            gameState.gameOver = true;
+            clearInterval(timerInterval);
+
+            const thudSound = document.getElementById('thud-sound');
+            const winSound = document.getElementById('win-sound');
+
+            let winner;
+            let winnerWrapper;
+            let loserFighter;
+            let loserPlayer;
+
+            if (gameState.p1.health <= 0) {
+                winner = `PLAYER ${p2Selection} WINS!`;
+                setFighterState(fighter2, 'victory', p2Selection);
+                winnerWrapper = fighter2Wrapper;
+                loserFighter = fighter1;
+                loserPlayer = p1Selection;
+            } else if (gameState.p2.health <= 0) {
+                winner = `PLAYER ${p1Selection} WINS!`;
+                setFighterState(fighter1, 'victory', p1Selection);
+                winnerWrapper = fighter1Wrapper;
+                loserFighter = fighter2;
+                loserPlayer = p2Selection;
+            } else {
+                // Time up - compare health
+                if (gameState.p1.health > gameState.p2.health) {
+                    winner = `PLAYER ${p1Selection} WINS!`;
+                    setFighterState(fighter1, 'victory', p1Selection);
+                    winnerWrapper = fighter1Wrapper;
+                    loserFighter = fighter2;
+                    loserPlayer = p2Selection;
+                } else if (gameState.p2.health > gameState.p1.health) {
+                    winner = `PLAYER ${p2Selection} WINS!`;
+                    setFighterState(fighter2, 'victory', p2Selection);
+                    winnerWrapper = fighter2Wrapper;
+                    loserFighter = fighter1;
+                    loserPlayer = p1Selection;
+                } else {
+                    winner = 'DRAW!';
+                    winnerWrapper = null;
+                    loserFighter = null;
+                }
+            }
+
+            // Play win sound and start sparkles on winner
+            if (winnerWrapper) {
+                if (winSound) winSound.play().catch(() => { });
+                startVictorySparkles(winnerWrapper);
+            }
+
+            // Make loser fall with thud
+            if (loserFighter) {
+                setFighterState(loserFighter, 'defeated', loserPlayer);
+                setTimeout(() => {
+                    if (thudSound) thudSound.play().catch(() => { });
+                }, 400);
+            }
+
+            winnerText.textContent = winner;
+
+            // Wait 10 seconds before showing rematch screen
+            setTimeout(() => {
+                stopVictorySparkles();
+                victoryOverlay.style.display = 'flex';
+                // Enable buttons immediately now since we waited 10 sec
+            }, 10000);
+        }
+
+        // Keyboard controls
+        const keys = {};
+        const MOVE_STEP = 50; // Pixels to move per key press
+        const LEFT_BOUNDARY = 270;
+        const RIGHT_BOUNDARY = 270;
+        const MIN_DISTANCE = 130; // Fighter width (64px at scale 0.8) x 2
+
+        function movePlayer1(direction) {
+            const arenaWidth = fightArena.offsetWidth;
+            if (direction < 0 && gameState.p1.x > LEFT_BOUNDARY) {
+                gameState.p1.x = Math.max(LEFT_BOUNDARY, gameState.p1.x + direction);
+            }
+            if (direction > 0 && gameState.p1.x < arenaWidth - RIGHT_BOUNDARY) {
+                const newX = gameState.p1.x + direction;
+                if (newX >= gameState.p2.x - MIN_DISTANCE) {
+                    if (!gameState.p2.isBlocking) {
+                        gameState.p2.x = Math.min(arenaWidth - RIGHT_BOUNDARY, gameState.p2.x + PUSH_DISTANCE);
+                    }
+                    gameState.p1.x = gameState.p2.x - MIN_DISTANCE;
+                } else {
+                    gameState.p1.x = newX;
+                }
+            }
+            updateFighterPositions();
+        }
+
+        function movePlayer2(direction) {
+            const arenaWidth = fightArena.offsetWidth;
+            if (direction < 0 && gameState.p2.x > LEFT_BOUNDARY) {
+                const newX = gameState.p2.x + direction;
+                if (newX <= gameState.p1.x + MIN_DISTANCE) {
+                    if (!gameState.p1.isBlocking) {
+                        gameState.p1.x = Math.max(LEFT_BOUNDARY, gameState.p1.x - PUSH_DISTANCE);
+                    }
+                    gameState.p2.x = gameState.p1.x + MIN_DISTANCE;
+                } else {
+                    gameState.p2.x = newX;
+                }
+            }
+            if (direction > 0 && gameState.p2.x < arenaWidth - RIGHT_BOUNDARY) {
+                gameState.p2.x = Math.min(arenaWidth - RIGHT_BOUNDARY, gameState.p2.x + direction);
+            }
+            updateFighterPositions();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (gameState.gameOver) return;
+
+            const key = e.key.toLowerCase();
+
+            // Movement - allow repeat but single step per press
+            if (key === 'a' && !e.repeat) {
+                movePlayer1(-MOVE_STEP);
+                return;
+            }
+            if (key === 'd' && !e.repeat) {
+                movePlayer1(MOVE_STEP);
+                return;
+            }
+            if (key === 'arrowleft' && !e.repeat) {
+                movePlayer2(-MOVE_STEP);
+                return;
+            }
+            if (key === 'arrowright' && !e.repeat) {
+                movePlayer2(MOVE_STEP);
+                return;
+            }
+
+            if (keys[key]) return; // Prevent key repeat for other actions
+            keys[key] = true;
+
+            const now = Date.now();
+
+            // ===== Player 1 controls =====
+            if (key === 'f' && now - gameState.p1.lastAttack > 400) {
+                gameState.p1.lastAttack = now;
+                setFighterState(fighter1, 'boxing', p1Selection);
+                setTimeout(() => {
+                    attack(gameState.p1, gameState.p2, fighter1, fighter2, fighter2Wrapper, PUNCH_DAMAGE, PUNCH_RANGE, false);
+                }, 150);
+                setTimeout(() => {
+                    if (!gameState.p1.isBlocking && !gameState.p1.isDucking) {
+                        setFighterState(fighter1, 'idle', p1Selection);
+                    }
+                }, 400);
+            }
+
+            if (key === 'g' && now - gameState.p1.lastAttack > 500) {
+                gameState.p1.lastAttack = now;
+                setFighterState(fighter1, 'kicking', p1Selection);
+                setTimeout(() => {
+                    attack(gameState.p1, gameState.p2, fighter1, fighter2, fighter2Wrapper, KICK_DAMAGE, KICK_RANGE, true);
+                }, 200);
+                setTimeout(() => {
+                    if (!gameState.p1.isBlocking && !gameState.p1.isDucking) {
+                        setFighterState(fighter1, 'idle', p1Selection);
+                    }
+                }, 500);
+            }
+
+            if (key === ' ') {
+                e.preventDefault();
+                gameState.p1.isBlocking = true;
+                setFighterState(fighter1, 'defend', p1Selection);
+            }
+
+            if (key === 's') {
+                gameState.p1.isDucking = true;
+                setFighterState(fighter1, 'duck', p1Selection);
+            }
+
+            // ===== Player 2 controls =====
+            if (key === 'l' && now - gameState.p2.lastAttack > 400) {
+                gameState.p2.lastAttack = now;
+                setFighterState(fighter2, 'boxing', p2Selection);
+                setTimeout(() => {
+                    attack(gameState.p2, gameState.p1, fighter2, fighter1, fighter1Wrapper, PUNCH_DAMAGE, PUNCH_RANGE, false);
+                }, 150);
+                setTimeout(() => {
+                    if (!gameState.p2.isBlocking && !gameState.p2.isDucking) {
+                        setFighterState(fighter2, 'idle', p2Selection);
+                    }
+                }, 400);
+            }
+
+            if (key === 'k' && now - gameState.p2.lastAttack > 500) {
+                gameState.p2.lastAttack = now;
+                setFighterState(fighter2, 'kicking', p2Selection);
+                setTimeout(() => {
+                    attack(gameState.p2, gameState.p1, fighter2, fighter1, fighter1Wrapper, KICK_DAMAGE, KICK_RANGE, true);
+                }, 200);
+                setTimeout(() => {
+                    if (!gameState.p2.isBlocking && !gameState.p2.isDucking) {
+                        setFighterState(fighter2, 'idle', p2Selection);
+                    }
+                }, 500);
+            }
+
+            if (key === 'enter') {
+                e.preventDefault();
+                gameState.p2.isBlocking = true;
+                setFighterState(fighter2, 'defend', p2Selection);
+            }
+
+            if (key === 'arrowdown') {
+                gameState.p2.isDucking = true;
+                setFighterState(fighter2, 'duck', p2Selection);
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            keys[key] = false;
+
+            if (key === ' ') {
+                gameState.p1.isBlocking = false;
+                if (!gameState.p1.isDucking) setFighterState(fighter1, 'idle', p1Selection);
+            }
+            if (key === 'enter') {
+                gameState.p2.isBlocking = false;
+                if (!gameState.p2.isDucking) setFighterState(fighter2, 'idle', p2Selection);
+            }
+            if (key === 's') {
+                gameState.p1.isDucking = false;
+                if (!gameState.p1.isBlocking) setFighterState(fighter1, 'idle', p1Selection);
+            }
+            if (key === 'arrowdown') {
+                gameState.p2.isDucking = false;
+                if (!gameState.p2.isBlocking) setFighterState(fighter2, 'idle', p2Selection);
+            }
+        });
+
+        // Game loop - only for overlap prevention check
+        function gameLoop() {
+            if (gameState.gameOver) return;
+
+            const arenaWidth = fightArena.offsetWidth;
+
+            // STRICT OVERLAP PREVENTION - Always enforce minimum distance
+            if (gameState.p2.x - gameState.p1.x < MIN_DISTANCE) {
+                const midpoint = (gameState.p1.x + gameState.p2.x) / 2;
+                gameState.p1.x = Math.max(LEFT_BOUNDARY, midpoint - MIN_DISTANCE / 2);
+                gameState.p2.x = Math.min(arenaWidth - RIGHT_BOUNDARY, midpoint + MIN_DISTANCE / 2);
+                updateFighterPositions();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', initGame);
+    </script>
+</body>
+
+</html>

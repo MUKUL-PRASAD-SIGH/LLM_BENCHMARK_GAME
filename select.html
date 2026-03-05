@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Fighters - LLM Fight Club</title>
+    <link rel="stylesheet" href="css/global.css">
+
+    <!-- React CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            background: radial-gradient(ellipse at center top, #1e90ff 0%, #0a4a8a 30%, #052a50 60%, #011627 100%);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        /* Scanline overlay for retro effect */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(0deg,
+                    rgba(0, 0, 0, 0.1) 0px,
+                    rgba(0, 0, 0, 0.1) 1px,
+                    transparent 1px,
+                    transparent 3px);
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(ellipse at center, rgba(30, 144, 255, 0.2) 0%, transparent 60%),
+                radial-gradient(circle at 20% 20%, rgba(100, 180, 255, 0.15) 0%, transparent 30%),
+                radial-gradient(circle at 80% 30%, rgba(100, 180, 255, 0.15) 0%, transparent 30%);
+            pointer-events: none;
+        }
+
+        #root {
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-bottom: 100px;
+        }
+
+        .choose-header {
+            margin-top: 5vh;
+            margin-bottom: 4vh;
+            z-index: 1;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .choose-header img {
+            max-width: 320px;
+            width: 65vw;
+            height: auto;
+            filter: drop-shadow(0 0 20px rgba(30, 144, 255, 0.6));
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .selection-area {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 50px;
+            width: 100%;
+            max-width: 850px;
+            padding: 20px;
+            z-index: 1;
+        }
+
+        .player-side {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            min-width: 120px;
+        }
+
+        .player-side h3 {
+            text-align: center;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 11px;
+            color: #fff;
+            margin: 0 0 12px 0;
+            text-shadow: 2px 2px 0 #000, 4px 4px 0 rgba(0, 0, 0, 0.3);
+            letter-spacing: 1px;
+        }
+
+        .player-btn {
+            background: linear-gradient(180deg, rgba(40, 40, 80, 0.8) 0%, rgba(20, 20, 40, 0.9) 100%);
+            border: 3px solid #4a4a8a;
+            padding: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border-radius: 0;
+            box-shadow:
+                inset 2px 2px 0 rgba(255, 255, 255, 0.2),
+                inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+                3px 3px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .player-btn img {
+            width: 70px;
+            height: 70px;
+            object-fit: contain;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .player-btn:hover {
+            border-color: #ffcc00;
+            transform: translate(-2px, -2px);
+            background: linear-gradient(180deg, rgba(80, 60, 20, 0.9) 0%, rgba(40, 30, 10, 0.9) 100%);
+            box-shadow:
+                inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+                inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+                5px 5px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .player-btn.selected {
+            border-color: #00ff00;
+            box-shadow:
+                inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+                inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+                0 0 15px rgba(0, 255, 0, 0.6),
+                3px 3px 0 rgba(0, 100, 0, 0.8);
+            background: linear-gradient(180deg, rgba(0, 80, 0, 0.8) 0%, rgba(0, 40, 0, 0.9) 100%);
+        }
+
+        .player-btn.disabled {
+            opacity: 0.3;
+            pointer-events: none;
+            filter: grayscale(100%);
+        }
+
+        .vs-text {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 28px;
+            color: #ff0040;
+            text-shadow:
+                3px 3px 0 #800020,
+                5px 5px 0 #000,
+                0 0 25px rgba(255, 0, 64, 0.8);
+            padding: 0 15px;
+            animation: vsPulse 1s ease-in-out infinite;
+            align-self: center;
+            margin-top: 160px;
+        }
+
+        @keyframes vsPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.08);
+            }
+        }
+
+        .done-btn {
+            position: fixed;
+            bottom: 35px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(180deg, #33cc33 0%, #22aa22 50%, #118811 100%);
+            border: 3px solid #005500;
+            padding: 10px 30px;
+            cursor: pointer;
+            z-index: 10;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 13px;
+            color: #fff;
+            text-shadow: 2px 2px 0 #000;
+            transition: all 0.15s ease;
+            opacity: 0.5;
+            pointer-events: none;
+            border-radius: 0;
+            box-shadow:
+                inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+                inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+                4px 4px 0 rgba(0, 0, 0, 0.6);
+        }
+
+        .done-btn.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .done-btn.active:hover {
+            background: linear-gradient(180deg, #44dd44 0%, #33cc33 50%, #22aa22 100%);
+            transform: translateX(-50%) translate(-2px, -2px);
+            box-shadow:
+                inset 2px 2px 0 rgba(255, 255, 255, 0.4),
+                inset -2px -2px 0 rgba(0, 0, 0, 0.4),
+                6px 6px 0 rgba(0, 0, 0, 0.6);
+        }
+
+        /* Pixel Transition Overlay */
+        .pixel-transition-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
+            pointer-events: all;
+        }
+
+        .pixel-transition-overlay canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .transition-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Press Start 2P', monospace;
+            font-size: 48px;
+            color: #fff;
+            text-shadow:
+                4px 4px 0 #ff0040,
+                8px 8px 0 #000,
+                0 0 50px rgba(255, 204, 0, 0.8);
+            opacity: 0;
+            z-index: 10000;
+            transition: opacity 0.3s ease;
+        }
+
+        .transition-text.show {
+            opacity: 1;
+            animation: fightTextPulse 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes fightTextPulse {
+            from {
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            to {
+                transform: translate(-50%, -50%) scale(1.15);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <audio id="bell-sound" src="assets/sounds/bell.mp3"></audio>
+    <audio id="click-sound" src="assets/sounds/click.mp3"></audio>
+
+    <!-- Load React Components -->
+    <script src="js/PixelTransition.js"></script>
+
+    <script>
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // Player Button Component
+        function PlayerButton({ player, selected, disabled, onClick }) {
+            const className = `player-btn ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`;
+            return React.createElement('button', {
+                className,
+                'data-player': player,
+                onClick: () => !disabled && onClick(player)
+            },
+                React.createElement('img', {
+                    src: `assets/images/characters/player${player}.png`,
+                    alt: `Player ${player}`
+                })
+            );
+        }
+
+        // Player Side Component
+        function PlayerSide({ title, id, selectedPlayer, disabledPlayer, onSelect }) {
+            const players = [1, 2, 3, 4];
+
+            return React.createElement('div', { className: 'player-side', id },
+                React.createElement('h3', null, title),
+                players.map(player =>
+                    React.createElement(PlayerButton, {
+                        key: player,
+                        player,
+                        selected: selectedPlayer === player,
+                        disabled: disabledPlayer === player,
+                        onClick: onSelect
+                    })
+                )
+            );
+        }
+
+        // Main App Component
+        function SelectionApp() {
+            const [leftSelected, setLeftSelected] = useState(null);
+            const [rightSelected, setRightSelected] = useState(null);
+            const [isTransitioning, setIsTransitioning] = useState(false);
+            const clickSoundRef = useRef(null);
+            const bellSoundRef = useRef(null);
+
+            useEffect(() => {
+                clickSoundRef.current = document.getElementById('click-sound');
+                bellSoundRef.current = document.getElementById('bell-sound');
+            }, []);
+
+            const playClick = useCallback(() => {
+                if (clickSoundRef.current) {
+                    clickSoundRef.current.currentTime = 0;
+                    clickSoundRef.current.play().catch(() => { });
+                }
+            }, []);
+
+            const handleLeftSelect = useCallback((player) => {
+                playClick();
+                setLeftSelected(player);
+                // If right had the same selected, deselect it
+                if (rightSelected === player) {
+                    setRightSelected(null);
+                }
+            }, [playClick, rightSelected]);
+
+            const handleRightSelect = useCallback((player) => {
+                playClick();
+                setRightSelected(player);
+            }, [playClick]);
+
+            const handleStartFight = useCallback(() => {
+                if (leftSelected !== null && rightSelected !== null) {
+                    playClick();
+                    if (bellSoundRef.current) {
+                        bellSoundRef.current.play().catch(() => { });
+                    }
+                    setIsTransitioning(true);
+                }
+            }, [leftSelected, rightSelected, playClick]);
+
+            const handleTransitionComplete = useCallback(() => {
+                window.location.href = `arena.html?p1=${leftSelected}&p2=${rightSelected}`;
+            }, [leftSelected, rightSelected]);
+
+            const isDoneActive = leftSelected !== null && rightSelected !== null;
+
+            return React.createElement(React.Fragment, null, [
+                // Header
+                React.createElement('div', { key: 'header', className: 'choose-header' },
+                    React.createElement('img', {
+                        src: 'assets/images/landing/choose.png',
+                        alt: 'Choose Your Fighter'
+                    })
+                ),
+
+                // Selection Area
+                React.createElement('div', { key: 'selection', className: 'selection-area' }, [
+                    React.createElement(PlayerSide, {
+                        key: 'left',
+                        title: 'PLAYER 1',
+                        id: 'left-side',
+                        selectedPlayer: leftSelected,
+                        disabledPlayer: null,
+                        onSelect: handleLeftSelect
+                    }),
+                    React.createElement('div', { key: 'vs', className: 'vs-text' }, 'VS'),
+                    React.createElement(PlayerSide, {
+                        key: 'right',
+                        title: 'PLAYER 2',
+                        id: 'right-side',
+                        selectedPlayer: rightSelected,
+                        disabledPlayer: leftSelected,
+                        onSelect: handleRightSelect
+                    })
+                ]),
+
+                // Done Button
+                React.createElement('button', {
+                    key: 'done',
+                    className: `done-btn ${isDoneActive ? 'active' : ''}`,
+                    onClick: handleStartFight
+                }, 'FIGHT!'),
+
+                // Pixel Transition (React Component)
+                React.createElement(PixelTransition, {
+                    key: 'transition',
+                    isActive: isTransitioning,
+                    onComplete: handleTransitionComplete,
+                    text: 'FIGHT!'
+                })
+            ]);
+        }
+
+        // Mount React App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(SelectionApp));
+    </script>
+</body>
+
+</html>
