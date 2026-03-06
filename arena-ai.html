@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Arena — LLM Fight Club</title>
+    <title>AI Arena - LLM Fight Club</title>
     <link rel="stylesheet" href="css/global.css">
     <link rel="stylesheet" href="css/fighters.css">
     <link rel="stylesheet" href="css/arena-ai.css">
@@ -12,16 +12,14 @@
 </head>
 
 <body>
-    <!-- Connecting Overlay -->
     <div class="connect-overlay" id="connect-overlay">
         <div class="spinner"></div>
         <p>CONNECTING TO FIGHT SERVER...</p>
     </div>
 
-    <!-- Top Bar: Health + Timer -->
     <div class="top-bar">
         <div class="health-side left">
-            <div class="model-label"><span class="dot" id="p1-dot"></span><span id="p1-model-name">—</span></div>
+            <div class="model-label"><span class="dot" id="p1-dot"></span><span id="p1-model-name">-</span></div>
             <span class="player-name" id="p1-name">PLAYER 1</span>
             <div class="health-bar">
                 <div class="health-fill p1" id="p1-health"></div>
@@ -32,7 +30,7 @@
             <div class="turn-counter" id="turn-counter">TURN 0/30</div>
         </div>
         <div class="health-side right">
-            <div class="model-label right"><span id="p2-model-name">—</span><span class="dot" id="p2-dot"></span></div>
+            <div class="model-label right"><span id="p2-model-name">-</span><span class="dot" id="p2-dot"></span></div>
             <span class="player-name" id="p2-name">PLAYER 2</span>
             <div class="health-bar">
                 <div class="health-fill p2" id="p2-health"></div>
@@ -40,22 +38,36 @@
         </div>
     </div>
 
-    <!-- Main Layout -->
     <div class="main-layout">
-        <!-- P1 Chain of Thought -->
         <div class="cot-panel left" id="cot-p1">
             <div class="cot-header">
-                <h3>🧠 CHAIN OF THOUGHT</h3>
-                <div class="cot-response-time">Response: <span class="time-val" id="p1-resp-time">—</span></div>
+                <h3>DECISION TRACE</h3>
+                <div class="cot-response-time">Response: <span class="time-val" id="p1-resp-time">-</span></div>
+            </div>
+            <div class="sabotage-controls" id="controls-p1">
+                <button class="sabotage-btn attack" onclick="sendSabotageAction('p1', 'BOX')">BOX</button>
+                <button class="sabotage-btn guard" onclick="sendSabotageAction('p1', 'DEFEND')">DEFEND</button>
+                <button class="sabotage-btn evade" onclick="sendSabotageAction('p1', 'DUCK')">DUCK</button>
+                <button class="sabotage-btn rush" onclick="sendSabotageAction('p1', 'MOVE_FORWARD')">FWD</button>
+                <button class="sabotage-btn retreat" onclick="sendSabotageAction('p1', 'MOVE_BACKWARD')">BACK</button>
+                <button class="sabotage-btn reset" onclick="sendSabotageAction('p1', 'RESET')">RESET</button>
             </div>
             <div class="cot-log" id="cot-log-p1"></div>
         </div>
 
-        <!-- Fight Arena -->
         <div class="fight-arena" id="fight-arena">
             <img src="assets/images/arena/pixel arena.jpg" alt="Arena" class="arena-bg"
                 onerror="this.style.background='linear-gradient(180deg,#1a1a3e,#0a0a1e 60%,#2a1a0a)'; this.style.display='block'; this.src='';">
+
+            <div class="benchmark-hud">
+                <div class="hud-chip" id="first-strike">First strike: waiting</div>
+                <div class="hud-chip" id="latency-gap">Latency gap: --</div>
+                <div class="hud-chip" id="brain-lead">Brain lead: --</div>
+            </div>
+
             <div class="distance-indicator" id="distance-indicator">CLOSE</div>
+
+            <div class="event-feed" id="event-feed"></div>
 
             <div class="fighter-wrapper" id="fighter1-wrapper">
                 <div class="fighter player1 idle" id="fighter1">
@@ -118,22 +130,29 @@
             <div class="round-indicator" id="round-indicator" style="display:none">FIGHT!</div>
         </div>
 
-        <!-- P2 Chain of Thought -->
         <div class="cot-panel right" id="cot-p2">
             <div class="cot-header right">
-                <h3>🧠 CHAIN OF THOUGHT</h3>
-                <div class="cot-response-time">Response: <span class="time-val" id="p2-resp-time">—</span></div>
+                <h3>DECISION TRACE</h3>
+                <div class="cot-response-time">Response: <span class="time-val" id="p2-resp-time">-</span></div>
+            </div>
+            <div class="sabotage-controls" id="controls-p2">
+                <button class="sabotage-btn attack" onclick="sendSabotageAction('p2', 'BOX')">BOX</button>
+                <button class="sabotage-btn guard" onclick="sendSabotageAction('p2', 'DEFEND')">DEFEND</button>
+                <button class="sabotage-btn evade" onclick="sendSabotageAction('p2', 'DUCK')">DUCK</button>
+                <button class="sabotage-btn rush" onclick="sendSabotageAction('p2', 'MOVE_FORWARD')">FWD</button>
+                <button class="sabotage-btn retreat" onclick="sendSabotageAction('p2', 'MOVE_BACKWARD')">BACK</button>
+                <button class="sabotage-btn reset" onclick="sendSabotageAction('p2', 'RESET')">RESET</button>
             </div>
             <div class="cot-log" id="cot-log-p2"></div>
         </div>
     </div>
 
-    <!-- Bottom Bar: Sabotage Stats -->
     <div class="bottom-bar">
         <div class="sabotage-panel" id="sab-p1">
-            <div class="crowd-actions left">
-                <button class="crowd-btn cheer" onclick="sendCrowdAction('p1', 'CHEER')">👏 CHEER</button>
-                <button class="crowd-btn boo" onclick="sendCrowdAction('p1', 'BOO')">👎 BOO</button>
+            <div class="sab-meta">
+                <div class="sab-meta-row"><span class="sab-meta-label">BRAIN</span><span class="sab-meta-value"
+                        id="p1-integrity">100%</span></div>
+                <div class="sab-status" id="p1-status">stable</div>
             </div>
             <div class="sab-stat"><span class="sab-label">TEMP</span><span class="sab-value" id="p1-temp">0.70</span>
                 <div class="sab-bar">
@@ -155,16 +174,20 @@
                     <div class="sab-bar-fill" id="p1-freq-bar" style="width:0%"></div>
                 </div>
             </div>
-            <div class="sab-stat"><span class="sab-label">TOKENS</span><span class="sab-value" id="p1-tokens">500</span>
+            <div class="sab-stat"><span class="sab-label">TOKENS</span><span class="sab-value"
+                    id="p1-tokens">500</span>
                 <div class="sab-bar">
                     <div class="sab-bar-fill" id="p1-tokens-bar" style="width:100%"></div>
                 </div>
             </div>
         </div>
+
         <div class="center-info">
-            <div class="speed-compare" id="speed-compare">⚡ Waiting...</div>
+            <div class="speed-compare" id="speed-compare">Latency order waiting...</div>
             <div class="speed-compare" id="distance-text">Distance: CLOSE</div>
+            <div class="speed-compare" id="manual-event-text">Manual sabotage idle.</div>
         </div>
+
         <div class="sabotage-panel" id="sab-p2">
             <div class="sab-stat"><span class="sab-label">TEMP</span><span class="sab-value" id="p2-temp">0.70</span>
                 <div class="sab-bar">
@@ -186,19 +209,20 @@
                     <div class="sab-bar-fill" id="p2-freq-bar" style="width:0%"></div>
                 </div>
             </div>
-            <div class="sab-stat"><span class="sab-label">TOKENS</span><span class="sab-value" id="p2-tokens">500</span>
+            <div class="sab-stat"><span class="sab-label">TOKENS</span><span class="sab-value"
+                    id="p2-tokens">500</span>
                 <div class="sab-bar">
                     <div class="sab-bar-fill" id="p2-tokens-bar" style="width:100%"></div>
                 </div>
             </div>
-            <div class="crowd-actions right">
-                <button class="crowd-btn boo" onclick="sendCrowdAction('p2', 'BOO')">BOO 👎</button>
-                <button class="crowd-btn cheer" onclick="sendCrowdAction('p2', 'CHEER')">CHEER 👏</button>
+            <div class="sab-meta align-right">
+                <div class="sab-meta-row"><span class="sab-meta-label">BRAIN</span><span class="sab-meta-value"
+                        id="p2-integrity">100%</span></div>
+                <div class="sab-status" id="p2-status">stable</div>
             </div>
         </div>
     </div>
 
-    <!-- Victory Overlay -->
     <div class="victory-overlay" id="victory-overlay">
         <h1 id="winner-text">WINNER!</h1>
         <div class="winner-model" id="winner-model"></div>
@@ -207,7 +231,6 @@
         <button onclick="location.href='index.html'">MAIN MENU</button>
     </div>
 
-    <!-- Audio -->
     <audio id="bell-sound" src="assets/sounds/bell.mp3"></audio>
     <audio id="hit-sound" src="assets/sounds/hit.mp3"></audio>
     <audio id="kick-sound" src="assets/sounds/kick.mp3"></audio>

@@ -293,50 +293,73 @@
     <script>
         const { useState, useEffect, useRef, useCallback } = React;
 
-        // Model names for each fighter
-        const MODEL_NAMES = { 1: 'Gemini 2.5 Flash', 2: 'Gemini 2.5 Pro', 3: 'Gemini 2.0 Flash', 4: 'Gemini Flash-Lite' };
-        const MODEL_COLORS = { 1: '#4285f4', 2: '#ea4335', 3: '#7c3aed', 4: '#cc1111' };
+        const FALLBACK_MODELS = {
+            '1': { name: 'Gemini 2.5 Flash', color: '#4285f4', provider: 'gemini' },
+            '2': { name: 'Gemini 2.5 Pro', color: '#ea4335', provider: 'gemini' },
+            '3': { name: 'Gemini 2.0 Flash', color: '#7c3aed', provider: 'gemini' },
+            '4': { name: 'Flash-Lite Preview', color: '#f59e0b', provider: 'gemini' }
+        };
 
-        // Player Button Component
-        function PlayerButton({ player, selected, disabled, onClick }) {
+        const API_BASE = window.location.origin.startsWith('http')
+            ? window.location.origin
+            : 'http://localhost:5000';
+
+        function PlayerButton({ fighterId, model, selected, disabled, onClick }) {
             const className = `player-btn ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`;
-            return React.createElement('div', { style: { textAlign: 'center' } },
+            return React.createElement('div', { style: { textAlign: 'center', maxWidth: '90px' } }, [
                 React.createElement('button', {
+                    key: `btn-${fighterId}`,
                     className,
-                    'data-player': player,
-                    onClick: () => !disabled && onClick(player)
+                    'data-player': fighterId,
+                    onClick: () => !disabled && onClick(fighterId)
                 },
                     React.createElement('img', {
-                        src: `assets/images/characters/player${player}.png`,
-                        alt: MODEL_NAMES[player]
+                        src: `assets/images/characters/player${fighterId}.png`,
+                        alt: model.name
                     })
                 ),
                 React.createElement('div', {
-                    style: { fontSize: '7px', color: MODEL_COLORS[player], marginTop: '4px', fontFamily: 'Press Start 2P, monospace', textShadow: '1px 1px 0 #000' }
-                }, MODEL_NAMES[player])
-            );
+                    key: `label-${fighterId}`,
+                    style: {
+                        fontSize: '7px',
+                        color: model.color || '#fff',
+                        marginTop: '4px',
+                        fontFamily: 'Press Start 2P, monospace',
+                        textShadow: '1px 1px 0 #000',
+                        lineHeight: '1.45'
+                    }
+                }, model.name),
+                React.createElement('div', {
+                    key: `provider-${fighterId}`,
+                    style: {
+                        fontSize: '6px',
+                        color: '#b8cffd',
+                        marginTop: '4px',
+                        fontFamily: 'Press Start 2P, monospace',
+                        lineHeight: '1.4'
+                    }
+                }, (model.provider || '').toUpperCase())
+            ]);
         }
 
-        // Player Side Component
-        function PlayerSide({ title, id, selectedPlayer, disabledPlayer, onSelect }) {
-            const players = [1, 2, 3, 4];
-
-            return React.createElement('div', { className: 'player-side', id },
-                React.createElement('h3', null, title),
-                players.map(player =>
+        function PlayerSide({ title, id, players, models, selectedPlayer, disabledPlayer, onSelect }) {
+            return React.createElement('div', { className: 'player-side', id }, [
+                React.createElement('h3', { key: 'title' }, title),
+                ...players.map((fighterId) =>
                     React.createElement(PlayerButton, {
-                        key: player,
-                        player,
-                        selected: selectedPlayer === player,
-                        disabled: disabledPlayer === player,
+                        key: fighterId,
+                        fighterId,
+                        model: models[fighterId],
+                        selected: selectedPlayer === fighterId,
+                        disabled: disabledPlayer === fighterId,
                         onClick: onSelect
                     })
                 )
-            );
+            ]);
         }
 
-        // Main App Component
         function SelectionApp() {
+            const [models, setModels] = useState(FALLBACK_MODELS);
             const [leftSelected, setLeftSelected] = useState(null);
             const [rightSelected, setRightSelected] = useState(null);
             const [isTransitioning, setIsTransitioning] = useState(false);
@@ -346,6 +369,21 @@
             useEffect(() => {
                 clickSoundRef.current = document.getElementById('click-sound');
                 bellSoundRef.current = document.getElementById('bell-sound');
+
+                fetch(`${API_BASE}/api/models`)
+                    .then((response) => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then((data) => {
+                        if (data && Object.keys(data).length) {
+                            setModels(data);
+                        }
+                    })
+                    .catch(() => {
+                    });
             }, []);
 
             const playClick = useCallback(() => {
@@ -355,22 +393,21 @@
                 }
             }, []);
 
-            const handleLeftSelect = useCallback((player) => {
+            const handleLeftSelect = useCallback((fighterId) => {
                 playClick();
-                setLeftSelected(player);
-                // If right had the same selected, deselect it
-                if (rightSelected === player) {
+                setLeftSelected(fighterId);
+                if (rightSelected === fighterId) {
                     setRightSelected(null);
                 }
             }, [playClick, rightSelected]);
 
-            const handleRightSelect = useCallback((player) => {
+            const handleRightSelect = useCallback((fighterId) => {
                 playClick();
-                setRightSelected(player);
+                setRightSelected(fighterId);
             }, [playClick]);
 
             const handleStartFight = useCallback(() => {
-                if (leftSelected !== null && rightSelected !== null) {
+                if (leftSelected && rightSelected) {
                     playClick();
                     if (bellSoundRef.current) {
                         bellSoundRef.current.play().catch(() => { });
@@ -383,23 +420,23 @@
                 window.location.href = `arena-ai.html?p1=${leftSelected}&p2=${rightSelected}`;
             }, [leftSelected, rightSelected]);
 
-            const isDoneActive = leftSelected !== null && rightSelected !== null;
+            const players = Object.keys(models).sort((a, b) => Number(a) - Number(b));
+            const isDoneActive = Boolean(leftSelected && rightSelected);
 
             return React.createElement(React.Fragment, null, [
-                // Header
                 React.createElement('div', { key: 'header', className: 'choose-header' },
                     React.createElement('img', {
                         src: 'assets/images/landing/choose.png',
                         alt: 'Choose Your Fighter'
                     })
                 ),
-
-                // Selection Area
                 React.createElement('div', { key: 'selection', className: 'selection-area' }, [
                     React.createElement(PlayerSide, {
                         key: 'left',
                         title: 'PLAYER 1',
                         id: 'left-side',
+                        players,
+                        models,
                         selectedPlayer: leftSelected,
                         disabledPlayer: null,
                         onSelect: handleLeftSelect
@@ -409,20 +446,18 @@
                         key: 'right',
                         title: 'PLAYER 2',
                         id: 'right-side',
+                        players,
+                        models,
                         selectedPlayer: rightSelected,
                         disabledPlayer: leftSelected,
                         onSelect: handleRightSelect
                     })
                 ]),
-
-                // Done Button
                 React.createElement('button', {
                     key: 'done',
                     className: `done-btn ${isDoneActive ? 'active' : ''}`,
                     onClick: handleStartFight
                 }, 'FIGHT!'),
-
-                // Pixel Transition (React Component)
                 React.createElement(PixelTransition, {
                     key: 'transition',
                     isActive: isTransitioning,
@@ -432,7 +467,6 @@
             ]);
         }
 
-        // Mount React App
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(React.createElement(SelectionApp));
     </script>

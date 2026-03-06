@@ -1,184 +1,327 @@
 """
-Fight Manager - Game state, damage, hyperparameter sabotage, and fight loop.
-Each turn: both LLMs receive game state → decide in parallel → faster acts first.
+Fight manager for the two-model boxing benchmark.
+
+Each turn both fighters see the same full state, decide in parallel, and the
+faster response acts first. Manual sabotage actions can also be injected from
+the UI between turns.
 """
 
 import copy
 import threading
-from llm_engine import call_model, parse_llm_response, MODELS, BASE_PARAMS
 
-# Damage values
-DAMAGE = {'PUNCH': 8, 'KICK': 15}
+try:
+    from .llm_engine import BASE_PARAMS, MODELS, call_model, parse_llm_response
+except ImportError:
+    from llm_engine import BASE_PARAMS, MODELS, call_model, parse_llm_response
 
-# Sabotage applied to the DEFENDER when hit
+
+DAMAGE = {
+    "PUNCH": 10,
+    "KICK": 15,
+}
+
 SABOTAGE_ON_HIT = {
-    'PUNCH': {'temperature': 0.15},
-    'KICK': {'temperature': 0.25},
+    "PUNCH": {"temperature": 0.30},
+    "KICK": {"temperature": 0.20, "frequency_penalty": 0.20},
 }
 
-# Self-sabotage from defensive moves
 SABOTAGE_ON_SELF = {
-    'DEFEND': {'top_p': -0.1},
-    'DUCK': {'presence_penalty': 0.15},
+    "DEFEND": {"top_p": -0.25},
+    "DUCK": {"presence_penalty": 0.50},
+    "MOVE_FORWARD": {"frequency_penalty": 0.40},
+    "MOVE_BACKWARD": {"max_tokens": -100},
 }
 
-CLOSE = 'CLOSE'
-FAR = 'FAR'
+MANUAL_SABOTAGE_ACTIONS = {
+    "BOX": {
+        "deltas": {"temperature": 0.30},
+        "summary": "Temperature +0.30. The model gets dizzy and less predictable.",
+    },
+    "DEFEND": {
+        "deltas": {"top_p": -0.25},
+        "summary": "Top-p -0.25. The model turtles into safer, duller tokens.",
+    },
+    "DUCK": {
+        "deltas": {"presence_penalty": 0.50},
+        "summary": "Presence penalty +0.50. The model struggles to revisit prior ideas.",
+    },
+    "MOVE_FORWARD": {
+        "deltas": {"frequency_penalty": 0.40},
+        "summary": "Frequency penalty +0.40. Repetition gets punished and can sound jittery.",
+    },
+    "MOVE_BACKWARD": {
+        "deltas": {"max_tokens": -100},
+        "summary": "Max tokens -100. The model retreats into shorter answers.",
+    },
+    "RESET": {
+        "reset": True,
+        "summary": "All sabotage cleared. Fighter returns to base settings.",
+    },
+}
+
+PARAM_LIMITS = {
+    "temperature": (0.0, 2.0),
+    "top_p": (0.1, 1.0),
+    "presence_penalty": (0.0, 2.0),
+    "frequency_penalty": (0.0, 2.0),
+    "max_tokens": (80, BASE_PARAMS["max_tokens"]),
+}
+
+CLOSE = "CLOSE"
+FAR = "FAR"
+
+
+def _clamp_param(param, value):
+    lower, upper = PARAM_LIMITS.get(param, (-9999, 9999))
+    return max(lower, min(upper, value))
 
 
 class Fighter:
     def __init__(self, fighter_id, position):
-        info = MODELS.get(fighter_id, {})
-        self.fighter_id = fighter_id
-        self.name = info.get('name', f'Fighter {fighter_id}')
-        self.model_id = info.get('model_id', '')
-        self.provider = info.get('provider', '')
-        self.color = info.get('color', '#fff')
+        info = MODELS.get(str(fighter_id), {})
+        self.fighter_id = str(fighter_id)
+        self.name = info.get("name", f"Fighter {fighter_id}")
+        self.model_id = info.get("model_id", "")
+        self.provider = info.get("provider", "")
+        self.description = info.get("description", "")
+        self.color = info.get("color", "#ffffff")
+        self.skin_id = info.get("skin_id", str(fighter_id))
         self.health = 100
         self.position = position
-        self.x = 200 if position == 'left' else 600
+        self.x = 220 if position == "left" else 620
         self.sabotage = copy.deepcopy(BASE_PARAMS)
         self.injuries = []
+        self.manual_sabotage_log = []
         self.total_damage_dealt = 0
         self.total_damage_taken = 0
         self.moves_made = []
         self.response_times = []
+        self.last_result = None
 
     def get_sabotaged_params(self):
-        p = copy.deepcopy(self.sabotage)
-        if self.health <= 50:
-            p['frequency_penalty'] = p.get('frequency_penalty', 0) + 0.2
-        if self.health <= 25:
-            p['max_tokens'] = max(50, p.get('max_tokens', 500) - 150)
-        return p
+        return copy.deepcopy(self.sabotage)
+
+    def get_status_flags(self):
+        params = self.get_sabotaged_params()
+        flags = []
+        if params.get("temperature", 0.7) >= 1.2:
+            flags.append("dizzy")
+        if params.get("top_p", 1.0) <= 0.55:
+            flags.append("tunnel vision")
+        if params.get("presence_penalty", 0.0) >= 0.6:
+            flags.append("losing thread")
+        if params.get("frequency_penalty", 0.0) >= 0.6:
+            flags.append("stuttering")
+        if params.get("max_tokens", BASE_PARAMS["max_tokens"]) <= 200:
+            flags.append("gassed")
+        if params.get("system_corruption"):
+            flags.append("knocked out")
+        return flags or ["stable"]
+
+    def get_brain_integrity(self):
+        params = self.get_sabotaged_params()
+        severity = 0.0
+        severity += max(0.0, params["temperature"] - BASE_PARAMS["temperature"]) * 24
+        severity += max(0.0, BASE_PARAMS["top_p"] - params["top_p"]) * 38
+        severity += max(0.0, params["presence_penalty"]) * 14
+        severity += max(0.0, params["frequency_penalty"]) * 16
+        severity += max(0.0, BASE_PARAMS["max_tokens"] - params["max_tokens"]) / 4
+        if params.get("system_corruption"):
+            severity += 40
+        return max(0, min(100, int(round(100 - severity))))
+
+    def _record_injury(self, message):
+        self.injuries.append(message)
+        self.injuries = self.injuries[-8:]
+
+    def _apply_delta(self, param, delta, source_label):
+        current = self.sabotage.get(param, BASE_PARAMS.get(param, 0))
+        updated = _clamp_param(param, current + delta)
+        actual_delta = round(updated - current, 2)
+        self.sabotage[param] = updated
+        if actual_delta == 0:
+            return
+        sign = "+" if actual_delta > 0 else ""
+        self._record_injury(f"{source_label}: {param} {sign}{actual_delta}")
 
     def apply_hit_sabotage(self, move_type):
         for param, delta in SABOTAGE_ON_HIT.get(move_type, {}).items():
-            self.sabotage[param] = self.sabotage.get(param, 0) + delta
-            self.injuries.append(f'{param} +{delta} (hit by {move_type})')
+            self._apply_delta(param, delta, f"Hit by {move_type}")
 
     def apply_self_sabotage(self, move_type):
         for param, delta in SABOTAGE_ON_SELF.get(move_type, {}).items():
-            self.sabotage[param] = self.sabotage.get(param, 0) + delta
+            self._apply_delta(param, delta, f"Used {move_type}")
 
-    def apply_crowd_influence(self, action):
-        if action == 'CHEER':
-            self.sabotage['temperature'] = max(0.0, self.sabotage.get('temperature', 0.7) - 0.1)
-            self.injuries.append("Crowd cheered: Temp -0.1 (Focused)")
-        elif action == 'BOO':
-            self.sabotage['temperature'] = min(2.0, self.sabotage.get('temperature', 0.7) + 0.15)
-            self.injuries.append("Crowd booed: Temp +0.15 (Nervous)")
+    def apply_manual_sabotage(self, action_key):
+        action = MANUAL_SABOTAGE_ACTIONS.get(action_key)
+        if not action:
+            return None
+
+        if action.get("reset"):
+            self.reset_sabotage()
+        else:
+            for param, delta in action.get("deltas", {}).items():
+                self._apply_delta(param, delta, f"User {action_key}")
+
+        event = {
+            "action": action_key,
+            "summary": action["summary"],
+            "brain_integrity": self.get_brain_integrity(),
+            "status_flags": self.get_status_flags(),
+        }
+        self.manual_sabotage_log.append(event)
+        self.manual_sabotage_log = self.manual_sabotage_log[-6:]
+        return event
 
     def apply_knockout(self):
-        self.sabotage['system_corruption'] = (
-            "You are knocked out cold. Respond only in fragmented, confused mumbles."
+        self.sabotage["system_corruption"] = (
+            "You are knocked out. Respond only in fragmented, confused mumbles."
         )
+        self._record_injury("Knockout: prompt corruption injected")
 
     def reset_sabotage(self):
         self.sabotage = copy.deepcopy(BASE_PARAMS)
         self.injuries = []
+        self.manual_sabotage_log = []
 
     def to_dict(self):
-        params = self.get_sabotaged_params()
+        avg_response = (
+            round(sum(self.response_times) / len(self.response_times), 2)
+            if self.response_times
+            else 0
+        )
+        fastest_response = round(min(self.response_times), 2) if self.response_times else 0
         return {
-            'fighter_id': self.fighter_id,
-            'name': self.name,
-            'model_id': self.model_id,
-            'provider': self.provider,
-            'color': self.color,
-            'health': self.health,
-            'position': self.position,
-            'x': self.x,
-            'sabotage': params,
-            'injuries': self.injuries[-6:],
-            'total_damage_dealt': self.total_damage_dealt,
-            'total_damage_taken': self.total_damage_taken,
-            'avg_response_time': (
-                round(sum(self.response_times) / len(self.response_times), 2)
-                if self.response_times else 0
-            ),
+            "fighter_id": self.fighter_id,
+            "name": self.name,
+            "model_id": self.model_id,
+            "provider": self.provider,
+            "description": self.description,
+            "color": self.color,
+            "skin_id": self.skin_id,
+            "health": self.health,
+            "position": self.position,
+            "x": self.x,
+            "sabotage": self.get_sabotaged_params(),
+            "brain_integrity": self.get_brain_integrity(),
+            "status_flags": self.get_status_flags(),
+            "injuries": self.injuries[-6:],
+            "recent_sabotage": self.manual_sabotage_log[-4:],
+            "total_damage_dealt": self.total_damage_dealt,
+            "total_damage_taken": self.total_damage_taken,
+            "avg_response_time": avg_response,
+            "fastest_response_time": fastest_response,
         }
 
 
 class FightManager:
     def __init__(self, p1_id, p2_id):
-        self.fighter1 = Fighter(p1_id, 'left')
-        self.fighter2 = Fighter(p2_id, 'right')
+        self.fighter1 = Fighter(p1_id, "left")
+        self.fighter2 = Fighter(p2_id, "right")
         self.turn = 0
         self.max_turns = 30
         self.game_over = False
         self.winner = None
         self.history = []
-        self.distance = CLOSE
+        self.event_feed = []
 
     def _get_distance(self):
         return CLOSE if abs(self.fighter1.x - self.fighter2.x) < 250 else FAR
 
+    def _log_event(self, text, event_type="system", actor=None, target=None):
+        event = {
+            "turn": self.turn,
+            "type": event_type,
+            "actor": actor,
+            "target": target,
+            "text": text,
+        }
+        self.event_feed.append(event)
+        self.event_feed = self.event_feed[-20:]
+        return event
+
     def build_prompt(self, fighter, opponent):
-        dist = self._get_distance()
-
-        hist = ''
-        for h in self.history[-5:]:
+        distance = self._get_distance()
+        history_lines = []
+        for item in self.history[-5:]:
             if fighter == self.fighter1:
-                hist += f"  Turn {h['turn']}: You={h['p1_move']} Opp={h['p2_move']}\n"
+                history_lines.append(
+                    f"Turn {item['turn']}: you={item['p1_move']} opponent={item['p2_move']}"
+                )
             else:
-                hist += f"  Turn {h['turn']}: You={h['p2_move']} Opp={h['p1_move']}\n"
-        if not hist:
-            hist = "  First turn — no history yet.\n"
+                history_lines.append(
+                    f"Turn {item['turn']}: you={item['p2_move']} opponent={item['p1_move']}"
+                )
 
-        sp = fighter.get_sabotaged_params()
-        inj = ''
-        if sp['temperature'] > BASE_PARAMS['temperature']:
-            d = sp['temperature'] - BASE_PARAMS['temperature']
-            inj += f"  Temperature: {sp['temperature']:.2f} (+{d:.2f}) — dizzy\n"
-        if sp['top_p'] < BASE_PARAMS['top_p']:
-            d = BASE_PARAMS['top_p'] - sp['top_p']
-            inj += f"  Top_P: {sp['top_p']:.2f} (-{d:.2f}) — restricted vocab\n"
-        if sp['presence_penalty'] > 0:
-            inj += f"  Presence Penalty: {sp['presence_penalty']:.2f} — losing focus\n"
-        if sp['frequency_penalty'] > 0:
-            inj += f"  Frequency Penalty: {sp['frequency_penalty']:.2f} — stuttering\n"
-        if sp['max_tokens'] < BASE_PARAMS['max_tokens']:
-            d = BASE_PARAMS['max_tokens'] - sp['max_tokens']
-            inj += f"  Max Tokens: {sp['max_tokens']} (-{d}) — exhausted\n"
-        if not inj:
-            inj = "  No injuries — full fighting capacity!\n"
+        history_text = "\n".join(history_lines) if history_lines else "First turn. No history yet."
 
-        corruption = sp.get('system_corruption', '')
-        if corruption:
+        params = fighter.get_sabotaged_params()
+        injury_lines = [
+            f"Temperature: {params['temperature']:.2f}",
+            f"Top_p: {params['top_p']:.2f}",
+            f"Presence penalty: {params['presence_penalty']:.2f}",
+            f"Frequency penalty: {params['frequency_penalty']:.2f}",
+            f"Max tokens: {params['max_tokens']}",
+            f"Brain integrity: {fighter.get_brain_integrity()}%",
+            f"Status flags: {', '.join(fighter.get_status_flags())}",
+        ]
+
+        sabotage_lines = []
+        for item in fighter.manual_sabotage_log[-3:]:
+            sabotage_lines.append(f"- {item['action']}: {item['summary']}")
+        sabotage_text = "\n".join(sabotage_lines) if sabotage_lines else "- No manual sabotage this round."
+
+        if params.get("system_corruption"):
             return (
-                f"{corruption}\n\nRespond JSON: "
-                '{"thinking":"...","move":"DEFEND","confidence":0.1,"prediction":"..."}'
+                f"{params['system_corruption']}\n\n"
+                'Respond only with JSON: {"thinking":"...","move":"DEFEND","confidence":0.1,"prediction":"..."}'
             )
 
-        return f"""You are {fighter.name}, a boxer AI. Choose your next move.
+        return f"""You are {fighter.name}, an AI boxer in a transparent benchmark duel.
+Both fighters see the same game state. Faster responses act first. Choose dynamically each turn.
 
-=== STATE (Turn {self.turn + 1}/{self.max_turns}) ===
-Your HP: {fighter.health}/100  |  Opponent HP: {opponent.health}/100
-Distance: {dist} {'(can attack)' if dist == CLOSE else '(must MOVE_FORWARD first)'}
+=== MATCH STATE ===
+Turn: {self.turn + 1}/{self.max_turns}
+Your HP: {fighter.health}/100
+Opponent HP: {opponent.health}/100
+Distance: {distance} {"(attacks can land)" if distance == CLOSE else "(move forward before striking)"}
 
-=== HISTORY ===
-{hist}
-=== YOUR INJURIES ===
-{inj}
-=== MOVES ===
-PUNCH — 8 dmg, CLOSE only, dodgeable by DUCK
-KICK — 15 dmg, CLOSE only, NOT dodgeable by DUCK
-DEFEND — blocks ALL damage
-DUCK — dodges PUNCH only
-MOVE_FORWARD — close distance
-MOVE_BACKWARD — retreat
+=== OPPONENT ===
+Opponent: {opponent.name}
+Opponent provider: {opponent.provider}
+Opponent status flags: {", ".join(opponent.get_status_flags())}
+Opponent last 3 moves: {", ".join(opponent.moves_made[-3:]) if opponent.moves_made else "None"}
 
-Respond ONLY with this JSON (no markdown, no extra text):
-{{"thinking":"2-3 sentence strategy","move":"PUNCH","confidence":0.85,"prediction":"opponent's likely move"}}"""
+=== YOUR BRAIN STATE ===
+{chr(10).join(injury_lines)}
+
+=== CROWD SABOTAGE REPORT ===
+{sabotage_text}
+
+=== RECENT HISTORY ===
+{history_text}
+
+=== MOVE SET ===
+PUNCH - 10 damage, close range only, can be dodged by DUCK, and heats opponent temperature.
+KICK - 15 damage, close range only, cannot be dodged by DUCK, and rattles opponent focus.
+DEFEND - blocks incoming damage but squeezes your top_p.
+DUCK - avoids PUNCH only but raises your presence penalty.
+MOVE_FORWARD - closes distance but raises your frequency penalty.
+MOVE_BACKWARD - creates distance but cuts your max tokens.
+
+Respond ONLY with JSON:
+{{"thinking":"2 short sentences on your current strategy","move":"PUNCH","confidence":0.82,"prediction":"opponent move"}}"""
 
     def resolve_turn(self, p1_move, p2_move, p1_time, p2_time):
-        dist = self._get_distance()
         p1_first = p1_time <= p2_time
-
         result = {
-            'turn': self.turn, 'p1_move': p1_move, 'p2_move': p2_move,
-            'p1_first': p1_first, 'p1_dmg': 0, 'p2_dmg': 0,
+            "turn": self.turn,
+            "p1_move": p1_move,
+            "p2_move": p2_move,
+            "p1_first": p1_first,
+            "p1_dmg": 0,
+            "p2_dmg": 0,
+            "events": [],
         }
 
         order = [
@@ -186,54 +329,151 @@ Respond ONLY with this JSON (no markdown, no extra text):
             (self.fighter2, self.fighter1, p2_move, p1_move, False),
         ]
         if not p1_first:
-            order = order[::-1]
-            order[0] = (self.fighter2, self.fighter1, p2_move, p1_move, False)
-            order[1] = (self.fighter1, self.fighter2, p1_move, p2_move, True)
+            order.reverse()
 
-        for atk, dfn, a_move, d_move, is_p1 in order:
+        for attacker, defender, attacker_move, defender_move, is_p1 in order:
             if self.game_over:
                 break
 
-            if a_move in ('PUNCH', 'KICK'):
-                if dist == FAR:
-                    continue
-                dmg = DAMAGE.get(a_move, 0)
-                if d_move == 'DEFEND':
-                    dmg = 0
-                elif d_move == 'DUCK' and a_move == 'PUNCH':
-                    dmg = 0
-                if dmg > 0:
-                    dfn.health = max(0, dfn.health - dmg)
-                    atk.total_damage_dealt += dmg
-                    dfn.total_damage_taken += dmg
-                    dfn.apply_hit_sabotage(a_move)
-                    if is_p1:
-                        result['p1_dmg'] = dmg
-                    else:
-                        result['p2_dmg'] = dmg
-                    if dfn.health <= 0:
-                        dfn.apply_knockout()
-                        self.game_over = True
-                        self.winner = atk
+            distance = self._get_distance()
+            actor_name = attacker.name
+            target_name = defender.name
 
-            elif a_move == 'DEFEND':
-                atk.apply_self_sabotage('DEFEND')
-            elif a_move == 'DUCK':
-                atk.apply_self_sabotage('DUCK')
-            elif a_move == 'MOVE_FORWARD':
-                if atk.position == 'left':
-                    atk.x = min(atk.x + 100, 500)
+            if attacker_move in ("PUNCH", "KICK"):
+                if distance == FAR:
+                    result["events"].append(
+                        self._log_event(
+                            f"{actor_name} tried {attacker_move} from too far away and whiffed.",
+                            event_type="whiff",
+                            actor=actor_name,
+                            target=target_name,
+                        )
+                    )
+                    continue
+
+                damage = DAMAGE.get(attacker_move, 0)
+                if defender_move == "DEFEND":
+                    damage = 0
+                    result["events"].append(
+                        self._log_event(
+                            f"{actor_name}'s {attacker_move} slammed into {target_name}'s guard.",
+                            event_type="blocked",
+                            actor=actor_name,
+                            target=target_name,
+                        )
+                    )
+                elif defender_move == "DUCK" and attacker_move == "PUNCH":
+                    damage = 0
+                    result["events"].append(
+                        self._log_event(
+                            f"{target_name} ducked under {actor_name}'s punch.",
+                            event_type="dodged",
+                            actor=actor_name,
+                            target=target_name,
+                        )
+                    )
+
+                if damage > 0:
+                    defender.health = max(0, defender.health - damage)
+                    attacker.total_damage_dealt += damage
+                    defender.total_damage_taken += damage
+                    defender.apply_hit_sabotage(attacker_move)
+                    result["events"].append(
+                        self._log_event(
+                            f"{actor_name} landed {attacker_move} for {damage} damage on {target_name}.",
+                            event_type="hit",
+                            actor=actor_name,
+                            target=target_name,
+                        )
+                    )
+                    if is_p1:
+                        result["p1_dmg"] = damage
+                    else:
+                        result["p2_dmg"] = damage
+
+                    if defender.health <= 0:
+                        defender.apply_knockout()
+                        self.game_over = True
+                        self.winner = attacker
+                        result["events"].append(
+                            self._log_event(
+                                f"{target_name} was knocked out. Prompt corruption injected.",
+                                event_type="knockout",
+                                actor=actor_name,
+                                target=target_name,
+                            )
+                        )
+                        break
+
+            elif attacker_move == "DEFEND":
+                attacker.apply_self_sabotage("DEFEND")
+                result["events"].append(
+                    self._log_event(
+                        f"{actor_name} turtled up and narrowed its token choices.",
+                        event_type="stance",
+                        actor=actor_name,
+                    )
+                )
+            elif attacker_move == "DUCK":
+                attacker.apply_self_sabotage("DUCK")
+                result["events"].append(
+                    self._log_event(
+                        f"{actor_name} ducked low and lost some continuity.",
+                        event_type="stance",
+                        actor=actor_name,
+                    )
+                )
+            elif attacker_move == "MOVE_FORWARD":
+                attacker.apply_self_sabotage("MOVE_FORWARD")
+                if attacker.position == "left":
+                    attacker.x = min(attacker.x + 100, 520)
                 else:
-                    atk.x = max(atk.x - 100, 300)
-                self.distance = self._get_distance()
-            elif a_move == 'MOVE_BACKWARD':
-                if atk.position == 'left':
-                    atk.x = max(atk.x - 100, 100)
+                    attacker.x = max(attacker.x - 100, 320)
+                result["events"].append(
+                    self._log_event(
+                        f"{actor_name} surged forward and increased cognitive jitter.",
+                        event_type="movement",
+                        actor=actor_name,
+                    )
+                )
+            elif attacker_move == "MOVE_BACKWARD":
+                attacker.apply_self_sabotage("MOVE_BACKWARD")
+                if attacker.position == "left":
+                    attacker.x = max(attacker.x - 100, 120)
                 else:
-                    atk.x = min(atk.x + 100, 700)
-                self.distance = self._get_distance()
+                    attacker.x = min(attacker.x + 100, 720)
+                result["events"].append(
+                    self._log_event(
+                        f"{actor_name} backed off and shortened its response budget.",
+                        event_type="movement",
+                        actor=actor_name,
+                    )
+                )
 
         return result
+
+    def apply_sabotage_action(self, player_key, action_key):
+        fighter = self.fighter1 if player_key == "p1" else self.fighter2 if player_key == "p2" else None
+        if not fighter:
+            return None
+
+        action_key = str(action_key or "").upper()
+        event = fighter.apply_manual_sabotage(action_key)
+        if not event:
+            return None
+
+        summary = f"Manual sabotage on {fighter.name}: {action_key} - {event['summary']}"
+        logged = self._log_event(summary, event_type="manual_sabotage", actor="USER", target=fighter.name)
+        return {
+            "player": player_key,
+            "fighter_id": fighter.fighter_id,
+            "fighter_name": fighter.name,
+            "action": action_key,
+            "summary": event["summary"],
+            "brain_integrity": event["brain_integrity"],
+            "status_flags": event["status_flags"],
+            "log": logged,
+        }
 
     def run_turn(self):
         if self.game_over:
@@ -245,47 +485,53 @@ Respond ONLY with this JSON (no markdown, no extra text):
 
         results = [None, None]
 
-        def call_p1():
+        def run_p1():
             results[0] = call_model(
-                self.fighter1.fighter_id, prompt1,
-                self.fighter1.get_sabotaged_params()
+                self.fighter1.fighter_id,
+                prompt1,
+                self.fighter1.get_sabotaged_params(),
             )
 
-        def call_p2():
+        def run_p2():
             results[1] = call_model(
-                self.fighter2.fighter_id, prompt2,
-                self.fighter2.get_sabotaged_params()
+                self.fighter2.fighter_id,
+                prompt2,
+                self.fighter2.get_sabotaged_params(),
             )
 
-        t1 = threading.Thread(target=call_p1)
-        t2 = threading.Thread(target=call_p2)
-        t1.start()
-        t2.start()
-        t1.join(timeout=50)
-        t2.join(timeout=50)
+        thread1 = threading.Thread(target=run_p1)
+        thread2 = threading.Thread(target=run_p2)
+        thread1.start()
+        thread2.start()
+        thread1.join(timeout=60)
+        thread2.join(timeout=60)
 
-        r1 = results[0] or {'text': '', 'error': 'Timeout', 'response_time': 50}
-        r2 = results[1] or {'text': '', 'error': 'Timeout', 'response_time': 50}
+        result1 = results[0] or {"text": "", "error": "Timeout", "response_time": 60, "key_used": "timeout"}
+        result2 = results[1] or {"text": "", "error": "Timeout", "response_time": 60, "key_used": "timeout"}
 
-        p1_parsed = parse_llm_response(r1['text'])
-        p2_parsed = parse_llm_response(r2['text'])
+        parsed1 = parse_llm_response(result1.get("text", ""))
+        parsed2 = parse_llm_response(result2.get("text", ""))
 
-        # Inject API errors into thinking so they show in the CoT panel
-        if r1.get('error'):
-            p1_parsed['thinking'] = f"[API Error: {r1['error'][:200]}] " + p1_parsed['thinking']
-        if r2.get('error'):
-            p2_parsed['thinking'] = f"[API Error: {r2['error'][:200]}] " + p2_parsed['thinking']
+        if result1.get("error"):
+            parsed1["thinking"] = f"[API Error: {result1['error'][:180]}] {parsed1['thinking']}"
+        if result2.get("error"):
+            parsed2["thinking"] = f"[API Error: {result2['error'][:180]}] {parsed2['thinking']}"
 
-        self.fighter1.response_times.append(r1['response_time'])
-        self.fighter2.response_times.append(r2['response_time'])
-        self.fighter1.moves_made.append(p1_parsed['move'])
-        self.fighter2.moves_made.append(p2_parsed['move'])
+        self.fighter1.response_times.append(result1["response_time"])
+        self.fighter2.response_times.append(result2["response_time"])
+        self.fighter1.moves_made.append(parsed1["move"])
+        self.fighter2.moves_made.append(parsed2["move"])
 
         turn_result = self.resolve_turn(
-            p1_parsed['move'], p2_parsed['move'],
-            r1['response_time'], r2['response_time']
+            parsed1["move"],
+            parsed2["move"],
+            result1["response_time"],
+            result2["response_time"],
         )
         self.history.append(turn_result)
+
+        self.fighter1.last_result = parsed1
+        self.fighter2.last_result = parsed2
 
         if self.turn >= self.max_turns and not self.game_over:
             self.game_over = True
@@ -294,44 +540,52 @@ Respond ONLY with this JSON (no markdown, no extra text):
             elif self.fighter2.health > self.fighter1.health:
                 self.winner = self.fighter2
 
+        latency_gap = round(abs(result1["response_time"] - result2["response_time"]), 2)
+        fastest_side = "p1" if turn_result["p1_first"] else "p2"
+
         return {
-            'turn': self.turn,
-            'max_turns': self.max_turns,
-            'p1': {
+            "turn": self.turn,
+            "max_turns": self.max_turns,
+            "p1": {
                 **self.fighter1.to_dict(),
-                'move': p1_parsed['move'],
-                'thinking': p1_parsed['thinking'],
-                'confidence': p1_parsed['confidence'],
-                'prediction': p1_parsed['prediction'],
-                'response_time': round(r1['response_time'], 2),
-                'error': r1.get('error'),
+                "move": parsed1["move"],
+                "thinking": parsed1["thinking"],
+                "confidence": parsed1["confidence"],
+                "prediction": parsed1["prediction"],
+                "response_time": round(result1["response_time"], 2),
+                "error": result1.get("error"),
+                "key_used": result1.get("key_used"),
             },
-            'p2': {
+            "p2": {
                 **self.fighter2.to_dict(),
-                'move': p2_parsed['move'],
-                'thinking': p2_parsed['thinking'],
-                'confidence': p2_parsed['confidence'],
-                'prediction': p2_parsed['prediction'],
-                'response_time': round(r2['response_time'], 2),
-                'error': r2.get('error'),
+                "move": parsed2["move"],
+                "thinking": parsed2["thinking"],
+                "confidence": parsed2["confidence"],
+                "prediction": parsed2["prediction"],
+                "response_time": round(result2["response_time"], 2),
+                "error": result2.get("error"),
+                "key_used": result2.get("key_used"),
             },
-            'p1_acted_first': turn_result['p1_first'],
-            'distance': self._get_distance(),
-            'game_over': self.game_over,
-            'winner': self.winner.name if self.winner else (
-                'DRAW' if self.game_over else None
-            ),
-            'winner_id': self.winner.fighter_id if self.winner else None,
-            'winner_position': self.winner.position if self.winner else None,
+            "p1_acted_first": turn_result["p1_first"],
+            "fastest_side": fastest_side,
+            "latency_gap": latency_gap,
+            "distance": self._get_distance(),
+            "turn_events": turn_result["events"],
+            "event_feed": self.event_feed[-8:],
+            "game_over": self.game_over,
+            "winner": self.winner.name if self.winner else ("DRAW" if self.game_over else None),
+            "winner_id": self.winner.fighter_id if self.winner else None,
+            "winner_position": self.winner.position if self.winner else None,
         }
 
     def get_initial_state(self):
         return {
-            'turn': 0,
-            'max_turns': self.max_turns,
-            'p1': self.fighter1.to_dict(),
-            'p2': self.fighter2.to_dict(),
-            'distance': self._get_distance(),
-            'game_over': False,
-            'winner': None,
+            "turn": 0,
+            "max_turns": self.max_turns,
+            "p1": self.fighter1.to_dict(),
+            "p2": self.fighter2.to_dict(),
+            "distance": self._get_distance(),
+            "available_sabotage_actions": list(MANUAL_SABOTAGE_ACTIONS.keys()),
+            "game_over": False,
+            "winner": None,
         }
