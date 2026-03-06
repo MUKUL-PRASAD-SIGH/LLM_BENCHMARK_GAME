@@ -1,6 +1,7 @@
 """
 LLM Engine - Handles API calls to Gemini models.
 Measures response time and applies hyperparameter sabotage.
+Uses LoadBalancer for intelligent API key routing & failover.
 """
 
 import time
@@ -9,6 +10,7 @@ import re
 import requests
 import os
 from dotenv import load_dotenv
+from load_balancer import LoadBalancer
 
 load_dotenv()
 
@@ -16,6 +18,18 @@ GEMINI_API_KEYS = [
     os.getenv('GEMINI_API_KEY_1', ''),
     os.getenv('GEMINI_API_KEY_2', ''),
 ]
+
+# Initialize the global load balancer
+lb = LoadBalancer(
+    keys=GEMINI_API_KEYS,
+    max_concurrent_per_key=3,
+    base_cooldown=5.0,
+    max_cooldown=120.0,
+)
+
+def get_lb_dashboard():
+    """Return load balancer health dashboard data."""
+    return lb.get_dashboard()
 
 # Model Registry — all 4 fighters use Gemini models (both keys confirmed working)
 MODELS = {
@@ -73,7 +87,11 @@ FIGHT_SYSTEM = (
 
 
 def call_gemini(model_id, prompt, params, api_key):
-    """Call Google Gemini API via REST."""
+    """
+    Call Google Gemini API via REST.
+    The api_key is managed by the LoadBalancer — success/failure is reported
+    back so the LB can adapt routing decisions.
+    """
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
         f"{model_id}:generateContent?key={api_key}"
@@ -105,56 +123,101 @@ def call_gemini(model_id, prompt, params, api_key):
             resp = requests.post(url, json=payload, timeout=45)
             elapsed = time.time() - start_time
 
-            if resp.status_code == 429 and attempt < max_retries:
-                wait = 2 ** (attempt + 1)  # 2s, 4s, 8s
-                print(f"  [GEMINI 429] {model_id} → rate limited, retry in {wait}s (attempt {attempt+1})")
-                time.sleep(wait)
-                continue
+            if resp.status_code == 429:
+                # Report rate-limit to load balancer (triggers cooldown)
+                lb.report_rate_limit(api_key)
+
+                if attempt < max_retries:
+                    # Try to get a different key from the balancer
+                    new_key = lb.acquire_key()
+                    if new_key and new_key != api_key:
+                        print(f"  [LB FAILOVER] {model_id} → key ...{api_key[-6:]} rate-limited, "
+                              f"switching to ...{new_key[-6:]} (attempt {attempt+1})")
+                        lb.release_key(api_key)
+                        api_key = new_key
+                        url = (
+                            f"https://generativelanguage.googleapis.com/v1beta/models/"
+                            f"{model_id}:generateContent?key={api_key}"
+                        )
+                    else:
+                        if new_key:
+                            lb.release_key(new_key)
+                        wait = 2 ** (attempt + 1)
+                        print(f"  [GEMINI 429] {model_id} → rate limited, retry in {wait}s "
+                              f"(attempt {attempt+1})")
+                        time.sleep(wait)
+                    continue
 
             if resp.status_code != 200:
                 err = resp.text[:400]
                 print(f"  [GEMINI ERR] {model_id} → {resp.status_code}: {err}")
-                return {'text': '', 'error': f"{resp.status_code}: {err}", 'response_time': elapsed}
+                lb.report_error(api_key)
+                return {'text': '', 'error': f"{resp.status_code}: {err}",
+                        'response_time': elapsed, 'key_used': f'...{api_key[-6:]}'}
 
             data = resp.json()
             cands = data.get('candidates', [])
             if not cands:
                 reason = data.get('promptFeedback', {}).get('blockReason', 'none')
                 print(f"  [GEMINI] {model_id} → blocked: {reason}")
-                return {'text': '', 'error': f"Blocked: {reason}", 'response_time': elapsed}
+                lb.report_success(api_key, elapsed)  # API worked, content was blocked
+                return {'text': '', 'error': f"Blocked: {reason}",
+                        'response_time': elapsed, 'key_used': f'...{api_key[-6:]}'}
 
             parts = cands[0].get('content', {}).get('parts', [])
             if not parts:
                 finish = cands[0].get('finishReason', '?')
                 print(f"  [GEMINI] {model_id} → empty, finish={finish}")
-                return {'text': '', 'error': f"Empty (finish={finish})", 'response_time': elapsed}
+                lb.report_success(api_key, elapsed)
+                return {'text': '', 'error': f"Empty (finish={finish})",
+                        'response_time': elapsed, 'key_used': f'...{api_key[-6:]}'}
 
             text = parts[0].get('text', '')
-            print(f"  [GEMINI OK] {model_id} → {len(text)} chars, {elapsed:.1f}s")
-            return {'text': text, 'error': None, 'response_time': elapsed}
+            print(f"  [GEMINI OK] {model_id} → {len(text)} chars, {elapsed:.1f}s "
+                  f"(key ...{api_key[-6:]})")
+            lb.report_success(api_key, elapsed)
+            return {'text': text, 'error': None,
+                    'response_time': elapsed, 'key_used': f'...{api_key[-6:]}'}
 
         except Exception as e:
             elapsed = time.time() - start_time
+            lb.report_error(api_key)
             if attempt < max_retries:
                 print(f"  [GEMINI EXC] {model_id} → {e}, retrying...")
                 time.sleep(2)
                 continue
             print(f"  [GEMINI EXC] {model_id} → {e}")
-            return {'text': '', 'error': str(e), 'response_time': elapsed}
+            return {'text': '', 'error': str(e),
+                    'response_time': elapsed, 'key_used': f'...{api_key[-6:]}'}
 
-    return {'text': '', 'error': 'Max retries exceeded', 'response_time': time.time() - start_time}
+    return {'text': '', 'error': 'Max retries exceeded',
+            'response_time': time.time() - start_time, 'key_used': f'...{api_key[-6:]}'}
 
 
 def call_model(fighter_id, prompt, sabotage_params):
-    """Route to the correct provider."""
+    """
+    Route to the correct provider using the LoadBalancer for key selection.
+    The preferred_index hint comes from the model config, but the LB will
+    override it if that key is unhealthy.
+    """
     info = MODELS.get(fighter_id)
     if not info:
         return {'text': '', 'error': f'Unknown fighter: {fighter_id}', 'response_time': 0}
 
     params = {**BASE_PARAMS, **sabotage_params}
-    idx = info.get('api_key_index', 0)
-    key = GEMINI_API_KEYS[idx] if idx < len(GEMINI_API_KEYS) else GEMINI_API_KEYS[0]
-    return call_gemini(info['model_id'], prompt, params, key)
+    preferred_idx = info.get('api_key_index', 0)
+
+    # Acquire a key from the load balancer (health-aware)
+    key = lb.acquire_key(preferred_index=preferred_idx)
+    if not key:
+        return {'text': '', 'error': 'No API keys available', 'response_time': 0}
+
+    try:
+        result = call_gemini(info['model_id'], prompt, params, key)
+        return result
+    finally:
+        # Always release the key back to the pool
+        lb.release_key(key)
 
 
 def parse_llm_response(text):

@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fight_manager import FightManager
-from llm_engine import MODELS
+from llm_engine import MODELS, get_lb_dashboard
 
 # --------------- Flask App ---------------
 app = Flask(__name__, static_folder='..', static_url_path='')
@@ -48,6 +48,13 @@ def get_models():
 @app.route('/api/health')
 def health_check():
     return jsonify({'status': 'ok', 'fights': len(active_fights)})
+
+
+@app.route('/api/lb-dashboard')
+def lb_dashboard():
+    """Load balancer health dashboard — shows per-key health scores,
+    success rates, active requests, cooldown status, etc."""
+    return jsonify(get_lb_dashboard())
 
 
 # --------------- WebSocket Events ---------------
@@ -98,6 +105,9 @@ def on_start_fight(data):
             turn_data = fm.run_turn()
             if turn_data is None:
                 break
+
+            # Attach load balancer health data to each turn
+            turn_data['lb_dashboard'] = get_lb_dashboard()
 
             socketio.emit('turn_result', turn_data, to=sid)
 
