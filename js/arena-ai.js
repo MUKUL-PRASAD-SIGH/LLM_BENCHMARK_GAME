@@ -458,6 +458,19 @@ socket.on('turn_result', (data) => {
         animateMove(fighter2, p2Skin, data.p2.move);
         setTimeout(() => animateMove(fighter1, p1Skin, data.p1.move), 280);
     }
+    
+    // Update visual positions across the ring based on x coordinates provided
+    // Virtual center is 420 as p1=220 and p2=620
+    if (data.p1 && data.p1.x !== undefined) {
+        const offset = data.p1.x - 420;
+        fighter1Wrapper.style.left = `calc(50% + ${offset}px)`;
+    }
+    if (data.p2 && data.p2.x !== undefined) {
+        const offset = data.p2.x - 420;
+        // override default right% style so left animation works
+        fighter2Wrapper.style.right = 'auto'; 
+        fighter2Wrapper.style.left = `calc(50% + ${offset - 64}px)`; // slight offset for fighter width
+    }
 
     triggerHitEffects(data.turn_events, data);
 

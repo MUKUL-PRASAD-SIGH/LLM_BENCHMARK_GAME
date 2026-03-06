@@ -240,6 +240,7 @@ class FightManager:
         return int(math.ceil(gap_after_close / 100)) if gap_after_close else 0
 
     def _fallback_move(self, fighter, opponent):
+        import random
         distance = self._get_distance()
         opponent_last_move = opponent.moves_made[-1] if opponent.moves_made else ""
 
@@ -252,7 +253,10 @@ class FightManager:
                 "raw": "",
             }
 
-        if opponent_last_move == "DEFEND":
+        # Add a bit of randomness so loop breaks if both fallback
+        roll = random.random()
+
+        if opponent_last_move == "DEFEND" and roll < 0.7:
             return {
                 "thinking": "Opponent has been shelling up. Kick is the highest-value close-range check.",
                 "move": "KICK",
@@ -261,7 +265,7 @@ class FightManager:
                 "raw": "",
             }
 
-        if opponent_last_move == "PUNCH":
+        if opponent_last_move == "PUNCH" and roll < 0.6:
             return {
                 "thinking": "Opponent just showed punch pressure. Duck is the safest reactive fallback.",
                 "move": "DUCK",
@@ -269,10 +273,19 @@ class FightManager:
                 "prediction": "PUNCH",
                 "raw": "",
             }
+            
+        if roll < 0.2:
+            return {
+                "thinking": "Unpredictable defensive response.",
+                "move": "DEFEND",
+                "confidence": 0.3,
+                "prediction": "PUNCH",
+                "raw": "",
+            }
 
         return {
             "thinking": "In range with no strong read. Defaulting to a basic punch instead of freezing.",
-            "move": "PUNCH",
+            "move": "PUNCH" if roll > 0.4 else "KICK",
             "confidence": 0.35,
             "prediction": opponent_last_move or "DEFEND",
             "raw": "",
@@ -382,6 +395,7 @@ MOVE_BACKWARD - creates distance but cuts your max tokens.
 - If the opponent is already guarding repeatedly at CLOSE, KICK is usually stronger than PUNCH.
 - If you need {moves_to_close} MOVE_FORWARD actions to enter CLOSE range, attacks before then will fail.
 - Fighters always face each other. You are not turned around.
+- Be unpredictable at CLOSE range. Do not constantly DUCK. Vary between PUNCH, KICK, DEFEND, and MOVE_BACKWARD.
 
 Respond ONLY with JSON:
 {{"thinking":"2 short sentences on your current strategy","move":"PUNCH","confidence":0.82,"prediction":"opponent move"}}"""
