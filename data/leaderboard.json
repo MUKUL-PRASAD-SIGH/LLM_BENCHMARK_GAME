@@ -2,19 +2,71 @@
   "models": [
     {
       "name": "groq",
-      "wins": 5,
-      "losses": 2,
-      "avg_score": 25.96,
-      "prediction_accuracy": 26.63,
-      "reasoning_quality": 2.05
+      "wins": 15,
+      "losses": 14,
+      "avg_score": 22.33,
+      "prediction_accuracy": 29.91,
+      "reasoning_quality": 2.08,
+      "categories": {
+        "Technical": {
+          "score": 20.21,
+          "matches": 4
+        },
+        "Ethical": {
+          "score": 20.88,
+          "matches": 3
+        },
+        "Scientific": {
+          "score": 21.93,
+          "matches": 3
+        },
+        "Business": {
+          "score": 20.86,
+          "matches": 3
+        },
+        "Creative": {
+          "score": 20.75,
+          "matches": 3
+        },
+        "General": {
+          "score": 25.8,
+          "matches": 1
+        }
+      }
     },
     {
       "name": "ollama",
-      "wins": 0,
-      "losses": 3,
-      "avg_score": 16.82,
-      "prediction_accuracy": 22.23,
-      "reasoning_quality": 1.89
+      "wins": 5,
+      "losses": 6,
+      "avg_score": 21.47,
+      "prediction_accuracy": 34.16,
+      "reasoning_quality": 1.85,
+      "categories": {
+        "Technical": {
+          "score": 28.05,
+          "matches": 2
+        },
+        "Ethical": {
+          "score": 24.62,
+          "matches": 1
+        },
+        "Scientific": {
+          "score": 13.1,
+          "matches": 1
+        },
+        "Business": {
+          "score": 23.1,
+          "matches": 1
+        },
+        "Creative": {
+          "score": 13.1,
+          "matches": 1
+        },
+        "General": {
+          "score": 28.52,
+          "matches": 1
+        }
+      }
     }
   ]
 }

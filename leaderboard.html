@@ -58,10 +58,11 @@
                     <th>Wins - Losses</th>
                     <th>Prediction %</th>
                     <th>Reasoning</th>
+                    <th>Category Mastery</th>
                 </tr>
             </thead>
             <tbody id="leaderboard-body">
-                <tr><td colspan="6">Loading rankings...</td></tr>
+                <tr><td colspan="7">Loading rankings...</td></tr>
             </tbody>
         </table>
         
@@ -90,6 +91,15 @@
                     else if (index === 1) { rankIcon = '🥈 2'; row.className = 'rank-2'; }
                     else if (index === 2) { rankIcon = '🥉 3'; row.className = 'rank-3'; }
                     
+                    let catHtml = '';
+                    if (model.categories) {
+                        const cats = Object.entries(model.categories)
+                            .sort((a,b) => b[1].score - a[1].score)
+                            .map(([name, data]) => `<span title="${data.matches} matches">${name}: ${data.score}</span>`)
+                            .join('<br/>');
+                        catHtml = `<div style="font-size: 0.55rem; line-height: 1.4; color: #aaa;">${cats}</div>`;
+                    }
+                    
                     row.innerHTML = `
                         <td>${rankIcon}</td>
                         <td>${model.name.toUpperCase()}</td>
@@ -97,6 +107,7 @@
                         <td>${model.wins}W - ${model.losses}L</td>
                         <td>${model.prediction_accuracy}%</td>
                         <td>${model.reasoning_quality}</td>
+                        <td>${catHtml || 'N/A'}</td>
                     `;
                     tbody.appendChild(row);
                 });

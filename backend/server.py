@@ -47,6 +47,29 @@ def get_models():
     return jsonify(MODELS)
 
 
+@app.route("/api/custom_model", methods=["POST"])
+def add_custom_model():
+    data = request.json or {}
+    name = data.get("name", "Custom Model")
+    provider = data.get("provider", "groq")
+    model_id = data.get("model_id", "llama3")
+    api_key = data.get("api_key", "").strip()
+    
+    # Generate unique slot
+    slot_id = str(len(MODELS) + 10) # 10+ so it doesn't collide with default 1,2,3,4
+    
+    MODELS[slot_id] = {
+        "name": name,
+        "provider": provider,
+        "model_id": model_id,
+        "custom_api_key": api_key,
+        "skin_id": "4", # Use default skin 4 for custom models
+        "color": "#00ff00"
+    }
+    
+    return jsonify({"slot_id": slot_id})
+
+
 @app.route("/api/health")
 def health_check():
     return jsonify({"status": "ok", "fights": len(active_fights)})

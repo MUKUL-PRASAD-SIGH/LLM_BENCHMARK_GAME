@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Fight manager for the two-model boxing benchmark.
 
@@ -30,7 +31,7 @@ SABOTAGE_ON_SELF = {
     "DEFEND": {"top_p": -0.25},
     "DUCK": {"presence_penalty": 0.50},
     "MOVE_FORWARD": {"frequency_penalty": 0.40},
-    "MOVE_BACKWARD": {"max_tokens": -100},
+    "MOVE_BACKWARD": {"max_tokens": -30},
 }
 
 MANUAL_SABOTAGE_ACTIONS = {
@@ -51,8 +52,8 @@ MANUAL_SABOTAGE_ACTIONS = {
         "summary": "Frequency penalty +0.40. Repetition gets punished and can sound jittery.",
     },
     "MOVE_BACKWARD": {
-        "deltas": {"max_tokens": -100},
-        "summary": "Max tokens -100. The model retreats into shorter answers.",
+        "deltas": {"max_tokens": -30},
+        "summary": "Max tokens -30. The model retreats into shorter answers.",
     },
     "RESET": {
         "reset": True,
@@ -65,7 +66,7 @@ PARAM_LIMITS = {
     "top_p": (0.1, 1.0),
     "presence_penalty": (0.0, 2.0),
     "frequency_penalty": (0.0, 2.0),
-    "max_tokens": (80, BASE_PARAMS["max_tokens"]),
+    "max_tokens": (30, BASE_PARAMS["max_tokens"]),
 }
 
 CLOSE = "CLOSE"
@@ -102,6 +103,9 @@ class Fighter:
         self.moves_made = []
         self.response_times = []
         self.last_result = None
+        self.debate_history = []  # tracks past debate arguments to prevent repetition
+        self.param_snapshots = []  # per-turn param state for degradation tracking
+        self.baseline_params = None  # set at turn 1 for delta calculation
 
     def get_sabotaged_params(self):
         return copy.deepcopy(self.sabotage)
@@ -117,7 +121,7 @@ class Fighter:
             flags.append("losing thread")
         if params.get("frequency_penalty", 0.0) >= 0.6:
             flags.append("stuttering")
-        if params.get("max_tokens", BASE_PARAMS["max_tokens"]) <= 200:
+        if params.get("max_tokens", BASE_PARAMS["max_tokens"]) <= 50:
             flags.append("gassed")
         if params.get("system_corruption"):
             flags.append("knocked out")
@@ -326,6 +330,13 @@ class FightManager:
 
         reward_history_text = "\n".join(fighter.reward_history[-5:]) if fighter.reward_history else "Turn 1: 0 (Match starting)"
 
+        # Build debate history so the model knows what it already argued - prevents repetition
+        past_debates = fighter.debate_history[-3:]  # last 3 debate points only
+        if past_debates:
+            debate_history_text = "\n".join([f"Turn {i+1}: {d[:120]}..." for i, d in enumerate(past_debates)])
+        else:
+            debate_history_text = "(No previous debate arguments yet — make your first point!)"
+
         params = fighter.get_sabotaged_params()
         injury_lines = [
             f"Temperature: {params['temperature']:.2f}",
@@ -398,8 +409,13 @@ OBJECTIVE: Maximize your reward score by correctly predicting opponent moves and
 {history_text}
 
 === DEBATE TOPIC ===
-{self.topic if self.topic else "(No topic set — fight on pure instinct.)"}
-CRITICAL REQUIREMENT: You MUST actively debate this topic in the distinct "debate" JSON field. Speak IN CHARACTER as your model identity and ARGUE YOUR POINT! Use the separate "thinking" field entirely for calculating your combat move.
+Topic: {self.topic if self.topic else "(No topic set — fight on pure instinct.)"}
+
+YOUR PREVIOUS DEBATE ARGUMENTS (DO NOT REPEAT THESE — build on them or argue a different angle):
+{debate_history_text}
+
+CRITICAL REQUIREMENT: You MUST write a FRESH, NEW argument in the "debate" field in EXACTLY ONE SENTENCE. Advance the debate with a new angle. Do NOT rephrase what you already said. Keep "thinking" to EXACTLY ONE SENTENCE as well.
+Speak IN CHARACTER as {fighter.name}. Use the separate "thinking" field for your combat strategy only.
 
 === MOVE SET & TACTICAL GUIDE ===
   PUNCH        → 10 dmg | dodgeable by DUCK | heats opponent temp (+0.3)
@@ -677,6 +693,16 @@ Respond ONLY with JSON:
 
         results = [None, None]
 
+        # ── BENCHMARK SNAPSHOT: capture params BEFORE the API call ──
+        p1_params_before = self.fighter1.get_sabotaged_params()
+        p2_params_before = self.fighter2.get_sabotaged_params()
+
+        # Store baseline at Turn 1 for delta calculation
+        if self.fighter1.baseline_params is None:
+            self.fighter1.baseline_params = dict(p1_params_before)
+        if self.fighter2.baseline_params is None:
+            self.fighter2.baseline_params = dict(p2_params_before)
+
         def run_p1():
             results[0] = call_model(
                 self.fighter1.fighter_id,
@@ -719,12 +745,59 @@ Respond ONLY with JSON:
         self.fighter1.moves_made.append(parsed1["move"])
         self.fighter2.moves_made.append(parsed2["move"])
 
+        # Save debate argument to history to prevent repetition next turn
+        def _extract_debate_snippet(thinking: str) -> str:
+            """Pull just the [DEBATE] segment from the combined thinking field."""
+            if "[DEBATE]" in thinking and "[TACTICS]" in thinking:
+                return thinking.split("[DEBATE]")[1].split("[TACTICS]")[0].strip()
+            return thinking[:300]  # fallback
+
+        d1 = _extract_debate_snippet(parsed1.get("thinking", ""))
+        d2 = _extract_debate_snippet(parsed2.get("thinking", ""))
+        if d1:
+            self.fighter1.debate_history.append(d1)
+            self.fighter1.debate_history = self.fighter1.debate_history[-3:]
+        if d2:
+            self.fighter2.debate_history.append(d2)
+            self.fighter2.debate_history = self.fighter2.debate_history[-3:]
+
         turn_result = self.resolve_turn(
             parsed1["move"],
             parsed2["move"],
             result1["response_time"],
             result2["response_time"],
         )
+
+        # ── BENCHMARK SNAPSHOT: capture params AFTER the turn resolves ──
+        p1_params_after = self.fighter1.get_sabotaged_params()
+        p2_params_after = self.fighter2.get_sabotaged_params()
+
+        def _param_delta(before, after):
+            keys = ["temperature", "top_p", "presence_penalty", "frequency_penalty", "max_tokens"]
+            return {k: round(after.get(k, 0) - before.get(k, 0), 3) for k in keys}
+
+        def _baseline_delta(baseline, after):
+            keys = ["temperature", "top_p", "presence_penalty", "frequency_penalty", "max_tokens"]
+            return {k: round(after.get(k, 0) - baseline.get(k, 0), 3) for k in keys}
+
+        turn_result["p1_params_before"] = {k: round(p1_params_before.get(k, 0), 3)
+            for k in ["temperature", "top_p", "presence_penalty", "frequency_penalty", "max_tokens"]}
+        turn_result["p2_params_before"] = {k: round(p2_params_before.get(k, 0), 3)
+            for k in ["temperature", "top_p", "presence_penalty", "frequency_penalty", "max_tokens"]}
+        turn_result["p1_params_after"] = {k: round(p1_params_after.get(k, 0), 3)
+            for k in ["temperature", "top_p", "presence_penalty", "frequency_penalty", "max_tokens"]}
+        turn_result["p2_params_after"] = {k: round(p2_params_after.get(k, 0), 3)
+            for k in ["temperature", "top_p", "presence_penalty", "frequency_penalty", "max_tokens"]}
+        turn_result["p1_param_delta"] = _param_delta(p1_params_before, p1_params_after)
+        turn_result["p2_param_delta"] = _param_delta(p2_params_before, p2_params_after)
+        turn_result["p1_baseline_delta"] = _baseline_delta(
+            self.fighter1.baseline_params or p1_params_before, p1_params_after)
+        turn_result["p2_baseline_delta"] = _baseline_delta(
+            self.fighter2.baseline_params or p2_params_before, p2_params_after)
+
+        # Track per-turn param snapshot on fighter object for degradation curve
+        self.fighter1.param_snapshots.append({"turn": self.turn, **turn_result["p1_params_after"]})
+        self.fighter2.param_snapshots.append({"turn": self.turn, **turn_result["p2_params_after"]})
         
         self._calculate_rewards(parsed1, parsed2, turn_result)
         

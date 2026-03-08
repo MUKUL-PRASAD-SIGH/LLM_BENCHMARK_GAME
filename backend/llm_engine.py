@@ -154,7 +154,7 @@ BASE_PARAMS = {
     "top_p": 1.0,
     "presence_penalty": 0.0,
     "frequency_penalty": 0.0,
-    "max_tokens": 500,
+    "max_tokens": 200,
 }
 
 FIGHT_SYSTEM = (
@@ -234,14 +234,15 @@ def call_ollama(model_id, prompt, params):
     )
 
 
-def call_groq(model_id, prompt, params):
+def call_groq(model_id, prompt, params, custom_api_key=None):
     """Call Groq's OpenAI-compatible chat completions API."""
-    if not GROQ_API_KEY:
+    api_key = custom_api_key or GROQ_API_KEY
+    if not api_key:
         return _base_result(error="Groq API key is missing", error_type="config", key_used="missing")
 
     url = f"{GROQ_BASE_URL}/chat/completions"
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     candidate_models = []
@@ -447,18 +448,37 @@ def _from_data(data, valid_moves, raw):
 
 def _fallback(clean, valid_moves, raw):
     upper = clean.upper()
-    for move in ["MOVE_FORWARD", "MOVE_BACKWARD", "KICK", "PUNCH", "DUCK", "DEFEND", "BOX"]:
-        if move in upper:
-            normalized = _normalize_move(move)
-            if normalized in valid_moves:
-                return {
-                    "thinking": clean[:300],
-                    "move": normalized,
-                    "confidence": 0.3,
-                    "prediction": "Unknown",
-                    "raw": raw,
-                }
-    return _default(clean[:300])
+    
+    # Try to find a structured move key even if JSON is broken/truncated
+    match = re.search(r'"(?:move|action)"\s*:\s*"?([A-Z_]+)"?', upper)
+    if not match:
+        match = re.search(r'MOVE\s*[:=]\s*([A-Z_]+)', upper)
+        
+    if match:
+        move = _normalize_move(match.group(1))
+        if move in valid_moves:
+            return {
+                "thinking": clean[:300] + " (Extracted via regex fallback)",
+                "move": move,
+                "confidence": 0.5,
+                "prediction": "Unknown",
+                "raw": raw,
+            }
+            
+    # If no structured key, grab the LAST mentioned valid move (often the final decision)
+    found_moves = re.findall(r'\b(MOVE_FORWARD|MOVE_BACKWARD|KICK|PUNCH|DUCK|DEFEND|BOX)\b', upper)
+    if found_moves:
+        move = _normalize_move(found_moves[-1]) # take the last one
+        if move in valid_moves:
+            return {
+                "thinking": clean[:300] + " (Extracted last move via fallback)",
+                "move": move,
+                "confidence": 0.3,
+                "prediction": "Unknown",
+                "raw": raw,
+            }
+            
+    return _default(clean[:300] + " (Parse failure)")
 
 
 def _default(message):

@@ -595,28 +595,44 @@
             const [popupSide, setPopupSide] = useState(null);
             const [pendingSelection, setPendingSelection] = useState(null);
             const [isTransitioning, setIsTransitioning] = useState(false);
+            
+            // Custom Model States
+            const [showCustomModal, setShowCustomModal] = useState(false);
+            const [customModelData, setCustomModelData] = useState({
+                name: '', provider: 'groq', model_id: '', api_key: ''
+            });
+
             const clickSoundRef = useRef(null);
             const bellSoundRef = useRef(null);
+
+            const fetchModels = useCallback(() => {
+                fetch(`${API_BASE}/api/models`)
+                    .then(response => response.ok ? response.json() : Promise.reject())
+                    .then(data => { if (data && Object.keys(data).length) setModels(data); })
+                    .catch(() => {});
+            }, []);
 
             useEffect(() => {
                 clickSoundRef.current = document.getElementById('click-sound');
                 bellSoundRef.current = document.getElementById('bell-sound');
+                fetchModels();
+            }, [fetchModels]);
 
-                fetch(`${API_BASE}/api/models`)
-                    .then((response) => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then((data) => {
-                        if (data && Object.keys(data).length) {
-                            setModels(data);
-                        }
-                    })
-                    .catch(() => {
-                    });
-            }, []);
+            const handleCustomModelSubmit = useCallback(() => {
+                if (!customModelData.name || !customModelData.model_id) return;
+                
+                fetch(`${API_BASE}/api/custom_model`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(customModelData)
+                })
+                .then(res => res.json())
+                .then(data => {
+                    setShowCustomModal(false);
+                    setCustomModelData({ name: '', provider: 'groq', model_id: '', api_key: '' });
+                    fetchModels(); // Refresh available models
+                });
+            }, [customModelData, fetchModels]);
 
             const playClick = useCallback(() => {
                 if (clickSoundRef.current) {
@@ -682,6 +698,34 @@
             const isDoneActive = Boolean(leftSelected && rightSelected);
 
             return React.createElement(React.Fragment, null, [
+                showCustomModal && React.createElement('div', { key: 'custom-modal', className: 'name-popup-overlay' },
+                    React.createElement('div', { className: 'name-popup-box', style: { maxWidth: '450px' } }, [
+                        React.createElement('div', { key: 'title', className: 'name-popup-title' }, 'ADD CUSTOM LLM (SESSION)'),
+                        React.createElement('input', {
+                            key: 'mname', className: 'name-popup-input', placeholder: 'Display Name (e.g. GPT-4o)',
+                            value: customModelData.name, onChange: e => setCustomModelData({...customModelData, name: e.target.value})
+                        }),
+                        React.createElement('select', {
+                            key: 'mprov', className: 'name-popup-input', style: { appearance: 'none' },
+                            value: customModelData.provider, onChange: e => setCustomModelData({...customModelData, provider: e.target.value})
+                        }, [
+                            React.createElement('option', { key: 'g', value: 'groq' }, 'Groq API'),
+                            React.createElement('option', { key: 'o', value: 'ollama' }, 'Ollama Local')
+                        ]),
+                        React.createElement('input', {
+                            key: 'mid', className: 'name-popup-input', placeholder: 'Model ID (e.g. llama3-70b)',
+                            value: customModelData.model_id, onChange: e => setCustomModelData({...customModelData, model_id: e.target.value})
+                        }),
+                        React.createElement('input', {
+                            key: 'mkey', className: 'name-popup-input', placeholder: 'API Key (Optional for Groq)', type: 'password',
+                            value: customModelData.api_key, onChange: e => setCustomModelData({...customModelData, api_key: e.target.value})
+                        }),
+                        React.createElement('div', { key: 'btns', className: 'name-popup-buttons' }, [
+                            React.createElement('button', { key: 'c', className: 'name-popup-btn cancel', onClick: () => setShowCustomModal(false) }, 'CANCEL'),
+                            React.createElement('button', { key: 's', className: 'name-popup-btn confirm', onClick: handleCustomModelSubmit }, 'ADD MODEL')
+                        ])
+                    ])
+                ),
                 popupSide && pendingSelection && React.createElement(NamePopup, {
                     key: 'popup',
                     side: popupSide,
@@ -694,7 +738,13 @@
                     React.createElement('img', {
                         src: 'assets/images/landing/choose.png',
                         alt: 'Choose Your Fighter'
-                    })
+                    }),
+                    React.createElement('button', {
+                        style: {
+                            position: 'absolute', top: '10px', right: '10px', background: '#33cc33', color: '#fff', border: '2px solid #005500', fontFamily: 'Press Start 2P', fontSize: '8px', padding: '8px', cursor: 'pointer', zIndex: 100
+                        },
+                        onClick: () => setShowCustomModal(true)
+                    }, 'ADD CUSTOM MODEL')
                 ),
                 React.createElement('div', { key: 'selection', className: 'selection-area' }, [
                     React.createElement(PlayerSide, {
