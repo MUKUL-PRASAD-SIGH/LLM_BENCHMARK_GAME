@@ -62,11 +62,11 @@ DEFAULT_MODEL_SLOTS = {
         "color": "#f55036",
     },
     "3": {
-        "name": "Qwen3 Coder Next",
-        "model_id": "qwen3-coder-next",
-        "provider": "ollama",
+        "name": "GPT OSS 20B",
+        "model_id": "openai/gpt-oss-20b",
+        "provider": "groq",
         "skin_id": "3",
-        "description": "Ollama Cloud coding model tuned for agentic development workflows.",
+        "description": "OpenAI open-weight 20B model hosted on Groq.",
         "color": "#6ef2ff",
     },
     "4": {
@@ -87,7 +87,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_TIMEOUT = _to_int(os.getenv("GROQ_TIMEOUT"), 45)
 GROQ_RETRY_ATTEMPTS = max(1, _to_int(os.getenv("GROQ_RETRY_ATTEMPTS"), 2))
 GROQ_RETRY_BASE_DELAY = _to_float(os.getenv("GROQ_RETRY_BASE_DELAY"), 1.25)
-GROQ_FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b").strip()
+GROQ_FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "llama-3.1-8b-instant").strip()
 
 
 def _build_model_registry():
