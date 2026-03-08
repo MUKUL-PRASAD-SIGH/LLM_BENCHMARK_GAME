@@ -599,7 +599,7 @@
             // Custom Model States
             const [showCustomModal, setShowCustomModal] = useState(false);
             const [customModelData, setCustomModelData] = useState({
-                name: '', provider: 'groq', model_id: '', api_key: ''
+                name: '', provider: 'groq', model_id: '', api_key: '', skin_id: '1'
             });
 
             const clickSoundRef = useRef(null);
@@ -629,7 +629,7 @@
                 .then(res => res.json())
                 .then(data => {
                     setShowCustomModal(false);
-                    setCustomModelData({ name: '', provider: 'groq', model_id: '', api_key: '' });
+                    setCustomModelData({ name: '', provider: 'groq', model_id: '', api_key: '', skin_id: '1' });
                     fetchModels(); // Refresh available models
                 });
             }, [customModelData, fetchModels]);
@@ -720,6 +720,15 @@
                             key: 'mkey', className: 'name-popup-input', placeholder: 'API Key (Optional for Groq)', type: 'password',
                             value: customModelData.api_key, onChange: e => setCustomModelData({...customModelData, api_key: e.target.value})
                         }),
+                        React.createElement('select', {
+                            key: 'mskin', className: 'name-popup-input', style: { appearance: 'none', backgroundColor: '#111' },
+                            value: customModelData.skin_id, onChange: e => setCustomModelData({...customModelData, skin_id: e.target.value})
+                        }, [
+                            React.createElement('option', { key: 's1', value: '1' }, 'Avatar 1 (Boxer)'),
+                            React.createElement('option', { key: 's2', value: '2' }, 'Avatar 2 (Ninja)'),
+                            React.createElement('option', { key: 's3', value: '3' }, 'Avatar 3 (Robot)'),
+                            React.createElement('option', { key: 's4', value: '4' }, 'Avatar 4 (Brawler)')
+                        ]),
                         React.createElement('div', { key: 'btns', className: 'name-popup-buttons' }, [
                             React.createElement('button', { key: 'c', className: 'name-popup-btn cancel', onClick: () => setShowCustomModal(false) }, 'CANCEL'),
                             React.createElement('button', { key: 's', className: 'name-popup-btn confirm', onClick: handleCustomModelSubmit }, 'ADD MODEL')

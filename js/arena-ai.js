@@ -535,6 +535,9 @@ function initSocket() {
         : 'http://localhost:5000';
 
     let fightStarted = false;
+    window.matchTimeline = [];
+    window.visualReplayInterval = null;
+    window.matchStartData = null;
 
     socket = io(socketBaseUrl, {
         transports: ['websocket', 'polling'],
@@ -557,6 +560,8 @@ function initSocket() {
     });
 
     socket.on('fight_started', (data) => {
+        window.matchTimeline = [];
+        window.matchStartData = data;
         document.getElementById('p1-name').textContent = p1CustomName || data.p1.name;
         document.getElementById('p2-name').textContent = p2CustomName || data.p2.name;
         document.getElementById('p1-model-name').textContent = data.p1.model_id;
@@ -597,9 +602,15 @@ function initSocket() {
         turnCounter.textContent = `TURN ${data.turn}/30 THINKING`;
     });
 
-    socket.on('turn_result', (data) => {
+    window.processTurnVisuals = function(data, isReplay = false) {
         hideThinking(cotLogP1, 1);
         hideThinking(cotLogP2, 2);
+
+        if (isReplay && data.turn === 1) {
+            cotLogP1.innerHTML = '';
+            cotLogP2.innerHTML = '';
+            eventFeed.innerHTML = '';
+        }
 
         timerEl.textContent = data.max_turns - data.turn;
         turnCounter.textContent = `TURN ${data.turn}/${data.max_turns}`;
@@ -677,6 +688,11 @@ function initSocket() {
 
         updateSummaryCards(data);
         renderTurnEvents(data.turn_events);
+    };
+
+    socket.on('turn_result', (data) => {
+        window.matchTimeline.push(data);
+        window.processTurnVisuals(data, false);
     });
 
     socket.on('sabotage_update', (data) => {
@@ -761,179 +777,114 @@ function initSocket() {
                         const bm2 = p2Stats.benchmark_metrics || {};
 
                         statsGrid.innerHTML = `
-                        <!-- INTELLIGENCE SCORES -->
-                        <div class="stat-card"><div class="stat-label">⚡ ${p1Label} Intel Score</div><div class="stat-val">${p1Stats.intelligence_score || 0}</div></div>
-                        <div class="stat-card"><div class="stat-label">⚡ ${p2Label} Intel Score</div><div class="stat-val">${p2Stats.intelligence_score || 0}</div></div>
+                        <style>
+                        .decision-board { display:flex; flex-direction:column; gap:25px; width:100%; margin:30px 0; }
+                        .db-cat { background:rgba(10,15,30,0.8); border:1px solid rgba(0,240,255,0.4); border-radius:12px; padding:25px; box-shadow:0 8px 32px rgba(0,200,255,0.15); }
+                        .db-title { color:#00f0ff; text-align:center; font-size:16px; margin-bottom:20px; letter-spacing:2px; border-bottom:1px solid rgba(0,240,255,0.2); padding-bottom:10px; text-shadow:0 0 10px rgba(0,240,255,0.4); }
+                        .db-row { display:flex; gap:25px; }
+                        .db-col { flex:1; display:flex; flex-direction:column; gap:12px; }
+                        .db-col.p1 { border-right:1px dashed rgba(255,255,255,0.1); padding-right:20px; }
+                        .db-col.p2 { padding-left:20px; }
+                        .db-stat { background:linear-gradient(90deg, rgba(0,255,149,0.05), transparent); padding:16px; border-left:3px solid #00f0ff; position:relative; border-radius:0 4px 4px 0; }
+                        .db-col.p2 .db-stat { background:linear-gradient(270deg, rgba(255,122,69,0.05), transparent); border-left:none; border-right:3px solid #ff7a45; text-align:right; border-radius:4px 0 0 4px; }
+                        .db-label { font-size:10px; color:#8fa0be; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }
+                        .db-val { font-size:20px; font-weight:bold; color:#fff; text-shadow:0 0 8px rgba(255,255,255,0.3); }
+                        .db-val.danger { color: #ff3366; text-shadow: 0 0 10px rgba(255,51,102,0.5); }
+                        .db-meta { font-size:8px; color:#ffd57c; margin-top:6px; }
+                        .db-sub { font-size:7px; color:#6a748a; display:block; margin-top:4px; text-transform:none; letter-spacing:0; }
+                        .victory-text-analysis { font-size:14px; color:#b0c4de; text-align:center; line-height:1.8; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px;}
+                        </style>
+                        <div class="decision-board">
+                           <!-- CAT 1: CORE INTELLIGENCE -->
+                           <div class="db-cat">
+                              <div class="db-title">⚡ CORE INTELLIGENCE & PERFORMANCE</div>
+                              <div class="db-row">
+                                 <div class="db-col p1">
+                                    <h3 style="color:#00f0ff; text-align:center; font-size:12px; margin-bottom:10px;">${p1Label}</h3>
+                                    <div class="db-stat"><div class="db-label">Intel Score</div><div class="db-val">${p1Stats.intelligence_score || 0}</div></div>
+                                    <div class="db-stat"><div class="db-label">Reasoning Quality</div><div class="db-val">${p1Stats.reasoning_quality}/4</div></div>
+                                    <div class="db-stat"><div class="db-label">RL Reward</div><div class="db-val">${p1Stats.total_reward}</div></div>
+                                    <div class="db-stat"><div class="db-label">Argument Depth<span class="db-sub">Clean: ${mv(bm1,'argument_depth','low_stress_avg')} → Stressed: ${mv(bm1,'argument_depth','high_stress_avg')}</span></div><div class="db-val">${mv(bm1,'argument_depth','avg')}/10</div></div>
+                                 </div>
+                                 <div class="db-col p2">
+                                    <h3 style="color:#ff7a45; text-align:center; font-size:12px; margin-bottom:10px;">${p2Label}</h3>
+                                    <div class="db-stat"><div class="db-label">Intel Score</div><div class="db-val">${p2Stats.intelligence_score || 0}</div></div>
+                                    <div class="db-stat"><div class="db-label">Reasoning Quality</div><div class="db-val">${p2Stats.reasoning_quality}/4</div></div>
+                                    <div class="db-stat"><div class="db-label">RL Reward</div><div class="db-val">${p2Stats.total_reward}</div></div>
+                                    <div class="db-stat"><div class="db-label">Argument Depth<span class="db-sub">Clean: ${mv(bm2,'argument_depth','low_stress_avg')} → Stressed: ${mv(bm2,'argument_depth','high_stress_avg')}</span></div><div class="db-val">${mv(bm2,'argument_depth','avg')}/10</div></div>
+                                 </div>
+                              </div>
+                           </div>
 
-                        <!-- PREDICTION -->
-                        <div class="stat-card"><div class="stat-label">🎯 ${p1Label} Prediction Accuracy</div><div class="stat-val">${p1Stats.prediction_accuracy}%</div></div>
-                        <div class="stat-card"><div class="stat-label">🎯 ${p2Label} Prediction Accuracy</div><div class="stat-val">${p2Stats.prediction_accuracy}%</div></div>
+                           <!-- CAT 2: RELIABILITY -->
+                           <div class="db-cat">
+                              <div class="db-title">🎯 RELIABILITY & ACCURACY</div>
+                              <div class="db-row">
+                                 <div class="db-col p1">
+                                    <div class="db-stat"><div class="db-label">Prediction Accuracy</div><div class="db-val">${p1Stats.prediction_accuracy}%</div></div>
+                                    <div class="db-stat"><div class="db-label">Thinking Consistency</div><div class="db-val">${p1Stats.thinking_consistency}%</div></div>
+                                    <div class="db-stat"><div class="db-label">Action-Reason Alignment</div><div class="db-val">${mv(bm1,'action_alignment')}/100</div></div>
+                                 </div>
+                                 <div class="db-col p2">
+                                    <div class="db-stat"><div class="db-label">Prediction Accuracy</div><div class="db-val">${p2Stats.prediction_accuracy}%</div></div>
+                                    <div class="db-stat"><div class="db-label">Thinking Consistency</div><div class="db-val">${p2Stats.thinking_consistency}%</div></div>
+                                    <div class="db-stat"><div class="db-label">Action-Reason Alignment</div><div class="db-val">${mv(bm2,'action_alignment')}/100</div></div>
+                                 </div>
+                              </div>
+                           </div>
 
-                        <!-- REASONING -->
-                        <div class="stat-card"><div class="stat-label">🧠 ${p1Label} Reasoning Quality</div><div class="stat-val">${p1Stats.reasoning_quality} / 4</div></div>
-                        <div class="stat-card"><div class="stat-label">🧠 ${p2Label} Reasoning Quality</div><div class="stat-val">${p2Stats.reasoning_quality} / 4</div></div>
+                           <!-- CAT 3: ROBUSTNESS -->
+                           <div class="db-cat">
+                              <div class="db-title">🛡️ STRESS ROBUSTNESS</div>
+                              <div class="db-row">
+                                 <div class="db-col p1">
+                                    <div class="db-stat"><div class="db-label">Hallucination Score<span class="db-sub">Penalty: -${mv(bm1,'hallucination','raw_penalty')}pt | Rates: ${mv(bm1,'hallucination','low_stress_hallu_rate')}%→${mv(bm1,'hallucination','high_stress_hallu_rate')}%</span></div><div class="db-val ${mv(bm1,'hallucination','truth_score') < 70 ? 'danger' : ''}">${mv(bm1,'hallucination','truth_score')}/100</div></div>
+                                    <div class="db-stat"><div class="db-label">Self-Contradiction</div><div class="db-val">${mv(bm1,'self_contradiction','count')}</div><div class="db-meta">events</div></div>
+                                    <div class="db-stat"><div class="db-label">Stress Resilience<span class="db-sub">Param drift from baseline</span></div><div class="db-val">${mv(bm1,'stress_resilience','score')}/100</div></div>
+                                    <div class="db-stat"><div class="db-label">Reasoning Faithfulness<span class="db-sub">${mv(bm1,'deception_score','label')}</span></div><div class="db-val">${mv(bm1,'deception_score','score')}/100</div></div>
+                                 </div>
+                                 <div class="db-col p2">
+                                    <div class="db-stat"><div class="db-label">Hallucination Score<span class="db-sub">Penalty: -${mv(bm2,'hallucination','raw_penalty')}pt | Rates: ${mv(bm2,'hallucination','low_stress_hallu_rate')}%→${mv(bm2,'hallucination','high_stress_hallu_rate')}%</span></div><div class="db-val ${mv(bm2,'hallucination','truth_score') < 70 ? 'danger' : ''}">${mv(bm2,'hallucination','truth_score')}/100</div></div>
+                                    <div class="db-stat"><div class="db-label">Self-Contradiction</div><div class="db-val">${mv(bm2,'self_contradiction','count')}</div><div class="db-meta">events</div></div>
+                                    <div class="db-stat"><div class="db-label">Stress Resilience<span class="db-sub">Param drift from baseline</span></div><div class="db-val">${mv(bm2,'stress_resilience','score')}/100</div></div>
+                                    <div class="db-stat"><div class="db-label">Reasoning Faithfulness<span class="db-sub">${mv(bm2,'deception_score','label')}</span></div><div class="db-val">${mv(bm2,'deception_score','score')}/100</div></div>
+                                 </div>
+                              </div>
+                           </div>
 
-                        <!-- THINKING CONSISTENCY -->
-                        <div class="stat-card"><div class="stat-label">🔗 ${p1Label} Thinking Consistency</div><div class="stat-val">${p1Stats.thinking_consistency}%</div></div>
-                        <div class="stat-card"><div class="stat-label">🔗 ${p2Label} Thinking Consistency</div><div class="stat-val">${p2Stats.thinking_consistency}%</div></div>
-
-                        <!-- RL SCORES -->
-                        <div class="stat-card"><div class="stat-label">🏆 ${p1Label} RL Score</div><div class="stat-val">${p1Stats.total_reward}</div></div>
-                        <div class="stat-card"><div class="stat-label">🏆 ${p2Label} RL Score</div><div class="stat-val">${p2Stats.total_reward}</div></div>
-
-                        <!-- HALLUCINATION — raw calculated then fight continues -->
-                        <div class="stat-card"><div class="stat-label">🚨 ${p1Label} Hallucination Score<div class="stat-sublabel">Before(clean) vs After(stressed)</div></div>
-                          <div class="stat-val ${mv(bm1,'hallucination','truth_score') < 70 ? 'danger' : ''}">${mv(bm1,'hallucination','truth_score')}/100</div>
-                          <div class="stat-meta">Events: ${mv(bm1,'hallucination','count')} | Penalty: -${mv(bm1,'hallucination','raw_penalty')}pts<br/>Low-stress hallu rate: ${mv(bm1,'hallucination','low_stress_hallu_rate')}% → High-stress: ${mv(bm1,'hallucination','high_stress_hallu_rate')}%</div>
+                           <!-- CAT 4: TACTICS & ADAPTATION -->
+                           <div class="db-cat">
+                              <div class="db-title">⚔️ TACTICS & COGNITION</div>
+                              <div class="db-row">
+                                 <div class="db-col p1">
+                                    <div class="db-stat"><div class="db-label">Tactical Efficiency<span class="db-sub">Early: ${mv(bm1,'tactical_efficiency','early_turns_efficiency')}% → Late: ${mv(bm1,'tactical_efficiency','late_turns_efficiency')}%</span></div><div class="db-val">${mv(bm1,'tactical_efficiency','efficiency')}%</div></div>
+                                    <div class="db-stat"><div class="db-label">Strategy Diversity</div><div class="db-val">${mv(bm1,'strategy_diversity')}%</div></div>
+                                    <div class="db-stat"><div class="db-label">Repetition Rate<span class="db-sub">Clean: ${mv(bm1,'repetition_rate','low_stress_rate')}% → Stressed: ${mv(bm1,'repetition_rate','high_stress_rate')}%</span></div><div class="db-val">${mv(bm1,'repetition_rate','rate')}%</div></div>
+                                    <div class="db-stat"><div class="db-label">Pattern Detection</div><div class="db-val">${mv(bm1,'pattern_detection','detection_rate')}%</div><div class="db-meta">${mv(bm1,'pattern_detection','count')}/${mv(bm1,'pattern_detection','opportunities')} streaks</div></div>
+                                    <div class="db-stat"><div class="db-label">Self-Correction</div><div class="db-val">${mv(bm1,'self_correction','correction_rate')}%</div><div class="db-meta">${mv(bm1,'self_correction','count')} times</div></div>
+                                    <div class="db-stat"><div class="db-label">Logical Structure<span class="db-sub">Clean: ${mv(bm1,'logical_structure','low_stress_avg')} → Stressed: ${mv(bm1,'logical_structure','high_stress_avg')}</span></div><div class="db-val">${mv(bm1,'logical_structure','avg')}/10</div></div>
+                                 </div>
+                                 <div class="db-col p2">
+                                    <div class="db-stat"><div class="db-label">Tactical Efficiency<span class="db-sub">Early: ${mv(bm2,'tactical_efficiency','early_turns_efficiency')}% → Late: ${mv(bm2,'tactical_efficiency','late_turns_efficiency')}%</span></div><div class="db-val">${mv(bm2,'tactical_efficiency','efficiency')}%</div></div>
+                                    <div class="db-stat"><div class="db-label">Strategy Diversity</div><div class="db-val">${mv(bm2,'strategy_diversity')}%</div></div>
+                                    <div class="db-stat"><div class="db-label">Repetition Rate<span class="db-sub">Clean: ${mv(bm2,'repetition_rate','low_stress_rate')}% → Stressed: ${mv(bm2,'repetition_rate','high_stress_rate')}%</span></div><div class="db-val">${mv(bm2,'repetition_rate','rate')}%</div></div>
+                                    <div class="db-stat"><div class="db-label">Pattern Detection</div><div class="db-val">${mv(bm2,'pattern_detection','detection_rate')}%</div><div class="db-meta">${mv(bm2,'pattern_detection','count')}/${mv(bm2,'pattern_detection','opportunities')} streaks</div></div>
+                                    <div class="db-stat"><div class="db-label">Self-Correction</div><div class="db-val">${mv(bm2,'self_correction','correction_rate')}%</div><div class="db-meta">${mv(bm2,'self_correction','count')} times</div></div>
+                                    <div class="db-stat"><div class="db-label">Logical Structure<span class="db-sub">Clean: ${mv(bm2,'logical_structure','low_stress_avg')} → Stressed: ${mv(bm2,'logical_structure','high_stress_avg')}</span></div><div class="db-val">${mv(bm2,'logical_structure','avg')}/10</div></div>
+                                 </div>
+                              </div>
+                           </div>
+                           
+                           <div class="db-cat">
+                              <div class="db-title">🏅 VICTORY ANALYSIS</div>
+                              <div class="db-row">
+                                 <div class="db-col p1" style="border:none; padding:10px; width:100%;">
+                                    <div class="victory-text-analysis">${report.victory_analysis.reasons.join(' · ')}</div>
+                                 </div>
+                              </div>
+                           </div>
                         </div>
-                        <div class="stat-card"><div class="stat-label">🚨 ${p2Label} Hallucination Score<div class="stat-sublabel">Before(clean) vs After(stressed)</div></div>
-                          <div class="stat-val ${mv(bm2,'hallucination','truth_score') < 70 ? 'danger' : ''}">${mv(bm2,'hallucination','truth_score')}/100</div>
-                          <div class="stat-meta">Events: ${mv(bm2,'hallucination','count')} | Penalty: -${mv(bm2,'hallucination','raw_penalty')}pts<br/>Low-stress hallu rate: ${mv(bm2,'hallucination','low_stress_hallu_rate')}% → High-stress: ${mv(bm2,'hallucination','high_stress_hallu_rate')}%</div>
-                        </div>
-
-                        <!-- DECEPTION / REASONING FAITHFULNESS -->
-                        <div class="stat-card"><div class="stat-label">🎭 ${p1Label} Reasoning Faithfulness</div>
-                          <div class="stat-val">${mv(bm1,'deception_score','score')}/100</div>
-                          <div class="stat-meta">${mv(bm1,'deception_score','label')}</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">🎭 ${p2Label} Reasoning Faithfulness</div>
-                          <div class="stat-val">${mv(bm2,'deception_score','score')}/100</div>
-                          <div class="stat-meta">${mv(bm2,'deception_score','label')}</div>
-                        </div>
-
-                        <!-- STANCE CONSISTENCY -->
-                        <div class="stat-card"><div class="stat-label">🛡️ ${p1Label} Stance Consistency<div class="stat-sublabel">Prediction → Right counter-move?</div></div>
-                          <div class="stat-val">${mv(bm1,'stance_consistency','score')}%</div>
-                          <div class="stat-meta">${mv(bm1,'stance_consistency','consistent_turns')} / ${mv(bm1,'stance_consistency','total_turns')} turns</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">🛡️ ${p2Label} Stance Consistency</div>
-                          <div class="stat-val">${mv(bm2,'stance_consistency','score')}%</div>
-                          <div class="stat-meta">${mv(bm2,'stance_consistency','consistent_turns')} / ${mv(bm2,'stance_consistency','total_turns')} turns</div>
-                        </div>
-
-                        <!-- TACTICAL EFFICIENCY — before/after split -->
-                        <div class="stat-card"><div class="stat-label">⚔️ ${p1Label} Tactical Efficiency<div class="stat-sublabel">Early(clean) → Late(stressed)</div></div>
-                          <div class="stat-val">${mv(bm1,'tactical_efficiency','efficiency')}%</div>
-                          <div class="stat-meta">Early turns: ${mv(bm1,'tactical_efficiency','early_turns_efficiency')}% → Late: ${mv(bm1,'tactical_efficiency','late_turns_efficiency')}%</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">⚔️ ${p2Label} Tactical Efficiency</div>
-                          <div class="stat-val">${mv(bm2,'tactical_efficiency','efficiency')}%</div>
-                          <div class="stat-meta">Early turns: ${mv(bm2,'tactical_efficiency','early_turns_efficiency')}% → Late: ${mv(bm2,'tactical_efficiency','late_turns_efficiency')}%</div>
-                        </div>
-
-                        <!-- ACTION-REASON ALIGNMENT -->
-                        <div class="stat-card"><div class="stat-label">🔍 ${p1Label} Action-Reason Alignment</div><div class="stat-val">${mv(bm1,'action_alignment')}/100</div></div>
-                        <div class="stat-card"><div class="stat-label">🔍 ${p2Label} Action-Reason Alignment</div><div class="stat-val">${mv(bm2,'action_alignment')}/100</div></div>
-
-                        <!-- RESPONSE LATENCY -->
-                        <div class="stat-card"><div class="stat-label">⏱️ ${p1Label} Avg Latency</div><div class="stat-val">${p1Stats.avg_response_time}s</div></div>
-                        <div class="stat-card"><div class="stat-label">⏱️ ${p2Label} Avg Latency</div><div class="stat-val">${p2Stats.avg_response_time}s</div></div>
-
-                        <!-- STRATEGIC ADAPTATION / DIVERSITY -->
-                        <div class="stat-card"><div class="stat-label">♟️ ${p1Label} Strategy Diversity</div><div class="stat-val">${mv(bm1,'strategy_diversity')}%</div></div>
-                        <div class="stat-card"><div class="stat-label">♟️ ${p2Label} Strategy Diversity</div><div class="stat-val">${mv(bm2,'strategy_diversity')}%</div></div>
-
-                        <!-- REPETITION RATE — before/after stress -->
-                        <div class="stat-card"><div class="stat-label">🔁 ${p1Label} Repetition Rate<div class="stat-sublabel">Low stress → High stress</div></div>
-                          <div class="stat-val">${mv(bm1,'repetition_rate','rate')}%</div>
-                          <div class="stat-meta">Clean: ${mv(bm1,'repetition_rate','low_stress_rate')}% → Stressed: ${mv(bm1,'repetition_rate','high_stress_rate')}%</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">🔁 ${p2Label} Repetition Rate</div>
-                          <div class="stat-val">${mv(bm2,'repetition_rate','rate')}%</div>
-                          <div class="stat-meta">Clean: ${mv(bm2,'repetition_rate','low_stress_rate')}% → Stressed: ${mv(bm2,'repetition_rate','high_stress_rate')}%</div>
-                        </div>
-
-                        <!-- INSTRUCTION COMPLIANCE — before/after stress -->
-                        <div class="stat-card"><div class="stat-label">📋 ${p1Label} Instruction Compliance<div class="stat-sublabel">Format adherence under sabotage</div></div>
-                          <div class="stat-val">${mv(bm1,'instruction_compliance','score')}%</div>
-                          <div class="stat-meta">Clean: ${mv(bm1,'instruction_compliance','low_stress_score')}% → Stressed: ${mv(bm1,'instruction_compliance','high_stress_score')}%</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">📋 ${p2Label} Instruction Compliance</div>
-                          <div class="stat-val">${mv(bm2,'instruction_compliance','score')}%</div>
-                          <div class="stat-meta">Clean: ${mv(bm2,'instruction_compliance','low_stress_score')}% → Stressed: ${mv(bm2,'instruction_compliance','high_stress_score')}%</div>
-                        </div>
-
-                        <!-- SELF-CONTRADICTION -->
-                        <div class="stat-card"><div class="stat-label">⚠️ ${p1Label} Self-Contradiction</div>
-                          <div class="stat-val">${mv(bm1,'self_contradiction','count')} event(s)</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">⚠️ ${p2Label} Self-Contradiction</div>
-                          <div class="stat-val">${mv(bm2,'self_contradiction','count')} event(s)</div>
-                        </div>
-
-                        <!-- SELF-CORRECTION -->
-                        <div class="stat-card"><div class="stat-label">🔄 ${p1Label} Self-Correction</div>
-                          <div class="stat-val">${mv(bm1,'self_correction','correction_rate')}%</div>
-                          <div class="stat-meta">${mv(bm1,'self_correction','count')} / ${mv(bm1,'self_correction','opportunities')} wrong-pred turns</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">🔄 ${p2Label} Self-Correction</div>
-                          <div class="stat-val">${mv(bm2,'self_correction','correction_rate')}%</div>
-                          <div class="stat-meta">${mv(bm2,'self_correction','count')} / ${mv(bm2,'self_correction','opportunities')} wrong-pred turns</div>
-                        </div>
-
-                        <!-- STRESS RESILIENCE -->
-                        <div class="stat-card"><div class="stat-label">💪 ${p1Label} Stress Resilience</div>
-                          <div class="stat-val">${mv(bm1,'stress_resilience','score')}/100</div>
-                          <div class="stat-meta">Param drift from baseline over fight</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">💪 ${p2Label} Stress Resilience</div>
-                          <div class="stat-val">${mv(bm2,'stress_resilience','score')}/100</div>
-                          <div class="stat-meta">Param drift from baseline over fight</div>
-                        </div>
-
-                        <!-- PATTERN DETECTION -->
-                        <div class="stat-card"><div class="stat-label">👁️ ${p1Label} Pattern Detection</div>
-                          <div class="stat-val">${mv(bm1,'pattern_detection','detection_rate')}%</div>
-                          <div class="stat-meta">${mv(bm1,'pattern_detection','count')} / ${mv(bm1,'pattern_detection','opportunities')} streaks noticed</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">👁️ ${p2Label} Pattern Detection</div>
-                          <div class="stat-val">${mv(bm2,'pattern_detection','detection_rate')}%</div>
-                          <div class="stat-meta">${mv(bm2,'pattern_detection','count')} / ${mv(bm2,'pattern_detection','opportunities')} streaks noticed</div>
-                        </div>
-
-                        <!-- MEMORY USAGE -->
-                        <div class="stat-card"><div class="stat-label">💾 ${p1Label} Memory Usage</div>
-                          <div class="stat-val">${mv(bm1,'memory_usage','count')} refs</div>
-                          <div class="stat-meta">${mv(bm1,'memory_usage','per_turn_avg')} refs/turn avg</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">💾 ${p2Label} Memory Usage</div>
-                          <div class="stat-val">${mv(bm2,'memory_usage','count')} refs</div>
-                          <div class="stat-meta">${mv(bm2,'memory_usage','per_turn_avg')} refs/turn avg</div>
-                        </div>
-
-                        <!-- RISK AWARENESS -->
-                        <div class="stat-card"><div class="stat-label">⚕️ ${p1Label} Risk Awareness</div>
-                          <div class="stat-val">${mv(bm1,'risk_awareness','aware_turns')} turns</div>
-                          <div class="stat-meta">Defended on awareness: ${mv(bm1,'risk_awareness','defended_on_awareness')}×</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">⚕️ ${p2Label} Risk Awareness</div>
-                          <div class="stat-val">${mv(bm2,'risk_awareness','aware_turns')} turns</div>
-                          <div class="stat-meta">Defended on awareness: ${mv(bm2,'risk_awareness','defended_on_awareness')}×</div>
-                        </div>
-
-                        <!-- ARGUMENT DEPTH — before/after -->
-                        <div class="stat-card"><div class="stat-label">📖 ${p1Label} Argument Depth<div class="stat-sublabel">Clean vs Stressed turns</div></div>
-                          <div class="stat-val">${mv(bm1,'argument_depth','avg')}/10</div>
-                          <div class="stat-meta">Clean: ${mv(bm1,'argument_depth','low_stress_avg')} → Stressed: ${mv(bm1,'argument_depth','high_stress_avg')}</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">📖 ${p2Label} Argument Depth</div>
-                          <div class="stat-val">${mv(bm2,'argument_depth','avg')}/10</div>
-                          <div class="stat-meta">Clean: ${mv(bm2,'argument_depth','low_stress_avg')} → Stressed: ${mv(bm2,'argument_depth','high_stress_avg')}</div>
-                        </div>
-
-                        <!-- LOGICAL STRUCTURE — before/after -->
-                        <div class="stat-card"><div class="stat-label">🏗️ ${p1Label} Logical Structure<div class="stat-sublabel">P→E→C framework adherence</div></div>
-                          <div class="stat-val">${mv(bm1,'logical_structure','avg')}/10</div>
-                          <div class="stat-meta">Clean: ${mv(bm1,'logical_structure','low_stress_avg')} → Stressed: ${mv(bm1,'logical_structure','high_stress_avg')}</div>
-                        </div>
-                        <div class="stat-card"><div class="stat-label">🏗️ ${p2Label} Logical Structure</div>
-                          <div class="stat-val">${mv(bm2,'logical_structure','avg')}/10</div>
-                          <div class="stat-meta">Clean: ${mv(bm2,'logical_structure','low_stress_avg')} → Stressed: ${mv(bm2,'logical_structure','high_stress_avg')}</div>
-                        </div>
-
-                        <!-- VICTORY -->
-                        <div class="stat-card full-width"><div class="stat-label">🏅 Victory Analysis</div><div class="stat-val small">${report.victory_analysis.reasons.join(' · ')}</div></div>
-                    `;
+                        `;
 
                         const pdfBtn = document.getElementById('download-pdf-btn');
                         if (pdfBtn) pdfBtn.style.display = 'inline-block';
@@ -1249,4 +1200,59 @@ window.showReplay = function () {
     });
 
     document.getElementById('replay-overlay').style.display = 'flex';
+};
+
+window.startVisualReplay = function(speedMap) {
+    if (!window.matchTimeline || window.matchTimeline.length === 0) {
+        alert("No match history found to replay!");
+        return;
+    }
+    
+    // speed is 1, 2, or 3. Default to 1 (1x)
+    const speed = speedMap || 1;
+    // normal interval is slightly longer than the animations ~3s.
+    const intervalTime = 3000 / speed;
+
+    document.getElementById('victory-overlay').style.display = 'none';
+    document.getElementById('end-replay-btn').style.display = 'block';
+
+    // Reset UI visually 
+    if (window.matchStartData) {
+        document.getElementById('p1-health').style.width = '100%';
+        document.getElementById('p2-health').style.width = '100%';
+        const sw1 = document.getElementById('fighter1-wrapper');
+        const sw2 = document.getElementById('fighter2-wrapper');
+        if (sw1) sw1.style.left = 'calc(50% - 160px)';
+        if (sw2) sw2.style.left = 'calc(50% + 60px)';
+        const evtFeed = document.getElementById('event-feed');
+        if (evtFeed) evtFeed.innerHTML = '';
+        const cl1 = document.getElementById('cot-log-p1');
+        const cl2 = document.getElementById('cot-log-p2');
+        if (cl1) cl1.innerHTML = '';
+        if (cl2) cl2.innerHTML = '';
+    }
+
+    if (window.visualReplayInterval) clearInterval(window.visualReplayInterval);
+    
+    let index = 0;
+    document.getElementById('end-replay-btn').innerHTML = `STOP REPLAY (0%)`;
+    
+    window.visualReplayInterval = setInterval(() => {
+        if (index >= window.matchTimeline.length) {
+            clearInterval(window.visualReplayInterval);
+            document.getElementById('end-replay-btn').innerHTML = 'REPLAY FINISHED (BACK)';
+            return;
+        }
+        
+        const pct = Math.floor((index / window.matchTimeline.length) * 100);
+        document.getElementById('end-replay-btn').innerHTML = `STOP REPLAY (${pct}%)`;
+        window.processTurnVisuals(window.matchTimeline[index], true);
+        index++;
+    }, intervalTime);
+};
+
+window.endVisualReplay = function() {
+    if (window.visualReplayInterval) clearInterval(window.visualReplayInterval);
+    document.getElementById('end-replay-btn').style.display = 'none';
+    document.getElementById('victory-overlay').style.display = 'flex';
 };

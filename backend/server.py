@@ -54,6 +54,7 @@ def add_custom_model():
     provider = data.get("provider", "groq")
     model_id = data.get("model_id", "llama3")
     api_key = data.get("api_key", "").strip()
+    skin_id = data.get("skin_id", "4")
     
     # Generate unique slot
     slot_id = str(len(MODELS) + 10) # 10+ so it doesn't collide with default 1,2,3,4
@@ -63,7 +64,7 @@ def add_custom_model():
         "provider": provider,
         "model_id": model_id,
         "custom_api_key": api_key,
-        "skin_id": "4", # Use default skin 4 for custom models
+        "skin_id": str(skin_id),
         "color": "#00ff00"
     }
     

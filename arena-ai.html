@@ -237,6 +237,7 @@
         </div>
 
         <div class="fight-arena" id="fight-arena">
+            <button id="end-replay-btn" onclick="endVisualReplay()" style="display:none; position:absolute; top:20px; right: 20px; z-index: 1000; background: #ff1111; color: white; padding: 12px 24px; border: 2px solid white; border-radius: 8px; cursor: pointer; font-family: 'Press Start 2P', monospace; font-size:10px; box-shadow: 0 0 10px red;">STOP REPLAY</button>
             <img src="assets/images/arena/pixel arena.jpg" alt="Arena" class="arena-bg"
                 onerror="this.style.background='linear-gradient(180deg,#1a1a3e,#0a0a1e 60%,#2a1a0a)'; this.style.display='block'; this.src='';">
 
@@ -411,7 +412,10 @@
             <div id="heatmap-container" style="display:flex; justify-content:space-around; width:100%; margin: 10px 0; flex-wrap: wrap;"></div>
             <div class="stats-grid" id="stats-grid"></div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 20px;">
-                <button onclick="showReplay()" style="background: #ff4081; color: white;">REPLAY TIMELINE</button>
+                <button onclick="showReplay()" style="background: #ff4081; color: white;">TIMELINE</button>
+                <button onclick="startVisualReplay(1)" style="background: #ffaa00; color: white;">▶ 1X</button>
+                <button onclick="startVisualReplay(2)" style="background: #ff6600; color: white;">▶▶ 2X</button>
+                <button onclick="startVisualReplay(3)" style="background: #ff3300; color: white;">▶▶▶ 3X</button>
                 <button id="download-pdf-btn" onclick="downloadPDFReport()" style="display:none; background: linear-gradient(180deg, #3a86ff, #0056b3); border-color: #003087;">DOWNLOAD PDF REPORT</button>
                 <button onclick="location.href='select.html'">REMATCH</button>
                 <button onclick="location.href='index.html'">MAIN MENU</button>
