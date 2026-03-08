@@ -160,7 +160,8 @@ BASE_PARAMS = {
 FIGHT_SYSTEM = (
     "You are an LLM boxer in a live benchmark arena. "
     "Return only valid JSON with these keys: "
-    '"thinking" (short strategic summary, 2-3 sentences max), '
+    '"debate" (your argument on the current topic), '
+    '"thinking" (short tactical combat summary, 2-3 sentences max), '
     '"move" (exactly one of PUNCH, KICK, DEFEND, DUCK, MOVE_FORWARD, MOVE_BACKWARD), '
     '"confidence" (number between 0 and 1), '
     '"prediction" (short guess about the opponent\'s next move).'
@@ -356,12 +357,16 @@ MOVE_ALIASES = {
 
 
 def _extract_thinking(data):
-    return (
+    debate = str(data.get("debate", "")).strip()
+    strat = (
         str(data.get("thinking", "")).strip()
         or str(data.get("reasoning", "")).strip()
         or str(data.get("analysis", "")).strip()
-        or "No reasoning."
-    )[:500]
+        or "No tactical reasoning."
+    )
+    if debate:
+        return f"[DEBATE] {debate} [TACTICS] {strat}"[:1000]
+    return strat[:500]
 
 
 def _normalize_move(move):
@@ -403,14 +408,22 @@ def parse_llm_response(text):
 
     move_match = re.search(r'"(?:move|action)"\s*:\s*"([^"]+)"', json_blob)
     think_match = re.search(r'"(?:thinking|reasoning|analysis)"\s*:\s*"([^"]*)', json_blob)
+    debate_match = re.search(r'"debate"\s*:\s*"([^"]*)', json_blob)
     confidence_match = re.search(r'"confidence"\s*:\s*([\d.]+)', json_blob)
     prediction_match = re.search(r'"prediction"\s*:\s*"([^"]*)', json_blob)
 
     if move_match:
         move = _normalize_move(move_match.group(1))
         if move in valid_moves:
+            ostrat = think_match.group(1) if think_match else "Extracted from partial response"
+            odebate = debate_match.group(1) if debate_match else ""
+            if odebate:
+                final_think = f"[DEBATE] {odebate} [TACTICS] {ostrat}"[:1000]
+            else:
+                final_think = ostrat[:500]
+
             return {
-                "thinking": think_match.group(1) if think_match else "Extracted from partial response",
+                "thinking": final_think,
                 "move": move,
                 "confidence": float(confidence_match.group(1)) if confidence_match else 0.5,
                 "prediction": prediction_match.group(1) if prediction_match else "Unknown",
@@ -418,7 +431,6 @@ def parse_llm_response(text):
             }
 
     return _fallback(clean, valid_moves, text)
-
 
 def _from_data(data, valid_moves, raw):
     move = _normalize_move(data.get("move", data.get("action", "DEFEND")))

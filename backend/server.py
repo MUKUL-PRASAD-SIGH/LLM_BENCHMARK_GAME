@@ -52,6 +52,21 @@ def health_check():
     return jsonify({"status": "ok", "fights": len(active_fights)})
 
 
+@app.route("/api/leaderboard")
+def get_leaderboard():
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    leaderboard_path = os.path.join(data_dir, "leaderboard.json")
+    if os.path.exists(leaderboard_path):
+        import json
+        with open(leaderboard_path, "r") as f:
+            try:
+                data = json.load(f)
+                return jsonify(data)
+            except json.JSONDecodeError:
+                return jsonify({"models": []})
+    return jsonify({"models": []})
+
+
 @app.route("/api/download_report/<sid>")
 def download_report(sid):
     if sid not in active_fights:

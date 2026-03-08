@@ -123,6 +123,70 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    .replay-overlay {
+        position: fixed; inset: 0; z-index: 10000;
+        background: rgba(4, 4, 12, 0.90); backdrop-filter: blur(6px);
+        display: none; align-items: center; justify-content: center;
+        flex-direction: column;
+        animation: fadeIn 0.3s ease forwards;
+    }
+    .replay-modal {
+        background: linear-gradient(180deg, #0b0f1c, #070911);
+        border: 2px solid #00f0ff;
+        box-shadow: 0 0 25px rgba(0, 240, 255, 0.3), inset 0 0 15px rgba(0, 240, 255, 0.1);
+        padding: 2.5rem;
+        width: 85%; max-width: 900px;
+        max-height: 80vh; overflow-y: auto;
+        color: #cbd5e1;
+        font-family: Consolas, monospace;
+        border-radius: 6px;
+    }
+    .replay-modal::-webkit-scrollbar { width: 8px; }
+    .replay-modal::-webkit-scrollbar-track { background: #000; border-radius: 4px; }
+    .replay-modal::-webkit-scrollbar-thumb { background: #00f0ff; border-radius: 4px; }
+
+    .replay-timeline-item {
+        border-left: 2px solid rgba(0, 240, 255, 0.4);
+        padding-left: 1.5rem;
+        margin-bottom: 2.5rem;
+        position: relative;
+    }
+    .replay-timeline-item::before {
+        content: '';
+        position: absolute; left: -7px; top: 0;
+        width: 12px; height: 12px; background: #00f0ff; border-radius: 50%;
+        box-shadow: 0 0 12px #00f0ff;
+    }
+    .replay-turn { 
+        font-weight: bold; 
+        color: #ffeb3b; 
+        font-size: 0.9rem; 
+        font-family: 'Press Start 2P', monospace; 
+        margin-bottom: 1.2rem; 
+        text-shadow: 2px 2px 0px #000; 
+    }
+    .heatmap-img { 
+        max-width: 48%; 
+        border: 2px solid #00f0ff; 
+        border-radius: 8px; 
+        box-shadow: 0 0 15px rgba(0, 240, 255, 0.2); 
+    }
+    .close-replay-btn {
+        margin-top:20px; 
+        padding: 12px 24px; 
+        background: linear-gradient(180deg, #ff0055, #a30036); 
+        color: #fff; 
+        cursor: pointer; 
+        border: 2px solid #fff; 
+        font-family: 'Press Start 2P', monospace; 
+        font-size: 0.7rem; 
+        border-radius: 4px;
+        transition: transform 0.2s, background 0.2s;
+    }
+    .close-replay-btn:hover {
+        transform: scale(1.05);
+        background: linear-gradient(180deg, #ff3377, #cc0044);
+    }
     </style>
 
     <div class="connect-overlay" id="connect-overlay" style="display:none">
@@ -139,6 +203,7 @@
             <div class="health-bar">
                 <div class="health-fill p1" id="p1-health"></div>
             </div>
+            <div class="reward-score" id="p1-reward">RL Score: 0</div>
         </div>
         <div class="timer-box">
             <div class="timer" id="timer">30</div>
@@ -150,6 +215,7 @@
             <div class="health-bar">
                 <div class="health-fill p2" id="p2-health"></div>
             </div>
+            <div class="reward-score right" id="p2-reward">RL Score: 0</div>
         </div>
     </div>
 
@@ -339,12 +405,28 @@
     </div>
 
     <div class="victory-overlay" id="victory-overlay">
-        <h1 id="winner-text">WINNER!</h1>
-        <div class="winner-model" id="winner-model"></div>
-        <div class="stats-grid" id="stats-grid"></div>
-        <button id="download-pdf-btn" onclick="downloadPDFReport()" style="display:none; background: linear-gradient(180deg, #3a86ff, #0056b3); border-color: #003087;">DOWNLOAD PDF REPORT</button>
-        <button onclick="location.href='select.html'">REMATCH</button>
-        <button onclick="location.href='index.html'">MAIN MENU</button>
+        <div class="victory-scroll-wrapper">
+            <h1 id="winner-text">WINNER!</h1>
+            <div class="winner-model" id="winner-model"></div>
+            <div id="heatmap-container" style="display:flex; justify-content:space-around; width:100%; margin: 10px 0; flex-wrap: wrap;"></div>
+            <div class="stats-grid" id="stats-grid"></div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 20px;">
+                <button onclick="showReplay()" style="background: #ff4081; color: white;">REPLAY TIMELINE</button>
+                <button id="download-pdf-btn" onclick="downloadPDFReport()" style="display:none; background: linear-gradient(180deg, #3a86ff, #0056b3); border-color: #003087;">DOWNLOAD PDF REPORT</button>
+                <button onclick="location.href='select.html'">REMATCH</button>
+                <button onclick="location.href='index.html'">MAIN MENU</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="replay-overlay" id="replay-overlay">
+        <div class="replay-modal">
+            <h2 style="color:#00f0ff; margin-top:0; font-family: 'Press Start 2P', monospace; font-size: 1.2rem; text-shadow: 2px 2px 0 #000; margin-bottom: 2rem; text-align: center;">FIGHT REPLAY TIMELINE</h2>
+            <div id="replay-timeline"></div>
+            <div style="text-align: center;">
+                <button class="close-replay-btn" onclick="document.getElementById('replay-overlay').style.display='none'">CLOSE REPLAY</button>
+            </div>
+        </div>
     </div>
 
     <audio id="bell-sound" src="assets/sounds/bell.mp3"></audio>

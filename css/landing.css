@@ -169,3 +169,31 @@
     image-rendering: -moz-crisp-edges;
     image-rendering: crisp-edges;
 }
+
+.leaderboard-btn {
+    position: relative;
+    z-index: 200;
+    margin-top: 20px;
+    background: linear-gradient(180deg, #00c9ff, #0077cc);
+    color: #000;
+    border: 2px solid #fff;
+    padding: 14px 30px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 4px;
+    box-shadow: 0 0 18px rgba(0, 200, 255, 0.6), 4px 4px 0 #000;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    letter-spacing: 0.04em;
+}
+
+.leaderboard-btn:hover {
+    transform: scale(1.06) translateY(-2px);
+    box-shadow: 0 0 28px rgba(0, 220, 255, 0.9), 4px 4px 0 #000;
+    background: linear-gradient(180deg, #33d9ff, #0099ee);
+}
+
+.leaderboard-btn:active {
+    transform: scale(0.97);
+    box-shadow: 2px 2px 0 #000;
+}

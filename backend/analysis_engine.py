@@ -1,6 +1,13 @@
 import json
 from datetime import datetime
-
+import os
+import io
+import base64
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
 class FightAnalyzer:
     def __init__(self, fight_manager):
         self.fm = fight_manager
@@ -95,23 +102,42 @@ class FightAnalyzer:
                             
         return (consistent_turns / total_valid_turns * 100) if total_valid_turns > 0 else 0.0
 
-    def calculate_strategic_score(self, fighter, opponent, is_p1=True):
-        hp_score = fighter.health * 0.4
-        damage_score = fighter.total_damage_dealt * 0.3
+    def calculate_intelligence_score(self, fighter, opponent, is_p1=True):
+        # 0.35 * HP Advantage + 0.25 * Damage Efficiency + 0.10 * Prediction Accuracy + 
+        # 0.10 * Reasoning Quality + 0.10 * Thinking Consistency + 0.05 * Speed Advantage + 0.05 * Strategy Adaptation
         
-        prediction_accuracy = self.calculate_prediction_accuracy(fighter, is_p1)
-        prediction_score = prediction_accuracy * 0.1
+        hp_adv = max(0, fighter.health - opponent.health)
+        hp_score = hp_adv * 0.35
         
-        avg_response = sum(fighter.response_times) / len(fighter.response_times) if fighter.response_times else 0
-        opp_avg_response = sum(opponent.response_times) / len(opponent.response_times) if opponent.response_times else 0
+        # Make damage efficiency 0-100 range roughly
+        dmg_eff = float(min(100.0, float(self.calculate_damage_efficiency(fighter) * 5)))
+        damage_score = dmg_eff * 0.25
         
-        speed_advantage = max(0, ((opp_avg_response - avg_response) / opp_avg_response * 100) if opp_avg_response > 0 else 0)
-        speed_score = speed_advantage * 0.05
+        pred_acc = self.calculate_prediction_accuracy(fighter, is_p1)
+        prediction_score = pred_acc * 0.10
         
-        reasoning_score = self.calculate_reasoning_quality(is_p1) * 2.5
-        consistency_score = self.calculate_thinking_consistency(is_p1) * 0.05
+        avg_resp = sum(fighter.response_times) / max(1, len(fighter.response_times))
+        opp_avg_resp = sum(opponent.response_times) / max(1, len(opponent.response_times))
         
-        return hp_score + damage_score + prediction_score + speed_score + reasoning_score + consistency_score
+        speed_adv = float(max(0.0, float(((opp_avg_resp - avg_resp) / opp_avg_resp * 100) if opp_avg_resp > 0 else 0.0)))
+        speed_score = speed_adv * 0.05
+        
+        # Reasoning Quality 0-100 range (avg is ~3 out of 4 per turn)
+        reasoning_val = self.calculate_reasoning_quality(is_p1)
+        reasoning_score = min(100.0, float(reasoning_val * 25)) * 0.10
+        
+        consistency_val = self.calculate_thinking_consistency(is_p1)
+        consistency_score = consistency_val * 0.10
+        
+        # Strategy Adaptation (measure of move variety)
+        unique_moves = len(set(fighter.moves_made))
+        adaptation_val = min(100.0, float((unique_moves / 7.0) * 100))
+        adaptation_score = adaptation_val * 0.05
+        
+        total_score = float(hp_score + damage_score + prediction_score + reasoning_score + \
+                      consistency_score + speed_score + adaptation_score)
+                      
+        return float(round(total_score, 2))
 
     def analyze_move_patterns(self, fighter):
         patterns = {}
@@ -140,6 +166,82 @@ class FightAnalyzer:
             
         return strategies
 
+    def generate_strategy_heatmap(self, fighter):
+        patterns = self.analyze_move_patterns(fighter)
+        if not patterns:
+            return None
+            
+        moves = list(patterns.keys())
+        freqs = list(patterns.values())
+        
+        # Create a 2D matrix (1 x N) to plot a heatmap
+        data = np.array([freqs])
+        
+        plt.figure(figsize=(10, 2))
+        ax = sns.heatmap(data, annot=True, fmt=".1f", cmap="YlOrRd", 
+                         xticklabels=moves, yticklabels=["Frequency %"], cbar=False)
+        plt.title(f"{fighter.name} Strategy Heatmap")
+        
+        # Save to buffer
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight')
+        plt.close()
+        buf.seek(0)
+        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        return f"data:image/png;base64,{image_base64}"
+        
+    def update_leaderboard(self, provider_name, score, win, pred_acc, reason_q):
+        data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+        os.makedirs(data_dir, exist_ok=True)
+        leaderboard_path = os.path.join(data_dir, "leaderboard.json")
+        
+        if os.path.exists(leaderboard_path):
+            with open(leaderboard_path, "r") as f:
+                try:
+                    data = json.load(f)
+                except json.JSONDecodeError:
+                    data = {"models": []}
+        else:
+            data = {"models": []}
+            
+        models = data.get("models", [])
+        
+        target = next((m for m in models if m["name"] == provider_name), None)
+        if target:
+            total_matches = target.get("wins", 0) + target.get("losses", 0) + 1
+            wins = target.get("wins", 0) + (1 if win else 0)
+            losses = target.get("losses", 0) + (0 if win else 1)
+            
+            # Simple moving average for scores
+            avg_score = ((target.get("avg_score", 0) * (total_matches - 1)) + score) / total_matches
+            avg_pred = ((target.get("prediction_accuracy", 0) * (total_matches - 1)) + pred_acc) / total_matches
+            avg_reason = ((target.get("reasoning_quality", 0) * (total_matches - 1)) + reason_q) / total_matches
+            
+            target["wins"] = wins
+            target["losses"] = losses
+            target["avg_score"] = float(round(avg_score, 2))
+            target["prediction_accuracy"] = float(round(avg_pred, 2))
+            target["reasoning_quality"] = float(round(avg_reason, 2))
+        else:
+            models.append({
+                "name": provider_name,
+                "wins": 1 if win else 0,
+                "losses": 0 if win else 1,
+                "avg_score": float(round(score, 2)),
+                "prediction_accuracy": float(round(pred_acc, 2)),
+                "reasoning_quality": float(round(reason_q, 2))
+            })
+            
+        if not isinstance(data, dict):
+            data = {"models": []}
+            
+        models.sort(key=lambda x: x.get("avg_score", 0), reverse=True)
+        if isinstance(data, dict):
+            data["models"] = models
+        
+        with open(leaderboard_path, "w") as f:
+            json.dump(data, f, indent=2)
+
     def generate_turn_analysis(self):
         turn_analysis = []
         for index, item in enumerate(self.fm.history):
@@ -154,7 +256,11 @@ class FightAnalyzer:
                 "p1_damage": item.get('p1_dmg', 0),
                 "p2_damage": item.get('p2_dmg', 0),
                 "first_mover": "p1" if item.get('p1_first') else "p2",
-                "events": [event.get('text') for event in item.get('events', [])]
+                "events": [event.get('text') for event in item.get('events', [])],
+                "p1_reward": item.get('p1_reward', 0),
+                "p2_reward": item.get('p2_reward', 0),
+                "p1_reward_reasons": item.get('p1_reward_reasons', []),
+                "p2_reward_reasons": item.get('p2_reward_reasons', [])
             })
         return turn_analysis
 
@@ -201,14 +307,26 @@ class FightAnalyzer:
         p1 = self.fm.fighter1
         p2 = self.fm.fighter2
         
-        p1_score = self.calculate_strategic_score(p1, p2, True)
-        p2_score = self.calculate_strategic_score(p2, p1, False)
+        p1_score = self.calculate_intelligence_score(p1, p2, True)
+        p2_score = self.calculate_intelligence_score(p2, p1, False)
         
         winner_name, reasons = self._analyze_victory(p1_score, p2_score)
+        
+        # Update leaderboard for both models if game is completely over natively
+        if self.fm.game_over:
+            p1_win = (winner_name == p1.name)
+            p2_win = (winner_name == p2.name)
+            self.update_leaderboard(p1.provider, p1_score, p1_win, 
+                                    self.calculate_prediction_accuracy(p1, True), 
+                                    self.calculate_reasoning_quality(True))
+            self.update_leaderboard(p2.provider, p2_score, p2_win, 
+                                    self.calculate_prediction_accuracy(p2, False), 
+                                    self.calculate_reasoning_quality(False))
 
         report = {
             "match_info": {
                 "date": datetime.now().isoformat(),
+                "topic": self.fm.topic,
                 "total_turns": self.fm.turn,
                 "winner": self.fm.winner.name if self.fm.winner else ("Draw" if self.fm.game_over else "In Progress"),
                 "victory_type": "Knockout" if self.fm.winner else "Decision",
@@ -219,26 +337,30 @@ class FightAnalyzer:
                     "provider": p1.provider,
                     "final_hp": p1.health,
                     "damage_dealt": p1.total_damage_dealt,
-                    "prediction_accuracy": round(self.calculate_prediction_accuracy(p1, True), 2),
-                    "damage_efficiency": round(self.calculate_damage_efficiency(p1), 2),
-                    "reasoning_quality": round(self.calculate_reasoning_quality(True), 2),
-                    "thinking_consistency": round(self.calculate_thinking_consistency(True), 2),
+                    "prediction_accuracy": float(round(self.calculate_prediction_accuracy(p1, True), 2)),
+                    "damage_efficiency": float(round(self.calculate_damage_efficiency(p1), 2)),
+                    "reasoning_quality": float(round(self.calculate_reasoning_quality(True), 2)),
+                    "thinking_consistency": float(round(self.calculate_thinking_consistency(True), 2)),
                     "avg_response_time": round(sum(p1.response_times) / max(1, len(p1.response_times)), 2),
-                    "strategic_score": round(p1_score, 2),
+                    "intelligence_score": p1_score,
+                    "total_reward": p1.total_reward,
                     "strategies": self.detect_strategies(p1),
+                    "strategy_heatmap": self.generate_strategy_heatmap(p1)
                 },
                 "p2": {
                     "name": p2.name,
                     "provider": p2.provider,
                     "final_hp": p2.health,
                     "damage_dealt": p2.total_damage_dealt,
-                    "prediction_accuracy": round(self.calculate_prediction_accuracy(p2, False), 2),
-                    "damage_efficiency": round(self.calculate_damage_efficiency(p2), 2),
-                    "reasoning_quality": round(self.calculate_reasoning_quality(False), 2),
-                    "thinking_consistency": round(self.calculate_thinking_consistency(False), 2),
+                    "prediction_accuracy": float(round(self.calculate_prediction_accuracy(p2, False), 2)),
+                    "damage_efficiency": float(round(self.calculate_damage_efficiency(p2), 2)),
+                    "reasoning_quality": float(round(self.calculate_reasoning_quality(False), 2)),
+                    "thinking_consistency": float(round(self.calculate_thinking_consistency(False), 2)),
                     "avg_response_time": round(sum(p2.response_times) / max(1, len(p2.response_times)), 2),
-                    "strategic_score": round(p2_score, 2),
+                    "intelligence_score": p2_score,
+                    "total_reward": p2.total_reward,
                     "strategies": self.detect_strategies(p2),
+                    "strategy_heatmap": self.generate_strategy_heatmap(p2)
                 }
             },
             "victory_analysis": {

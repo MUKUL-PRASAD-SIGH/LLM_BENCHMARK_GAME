@@ -56,6 +56,15 @@ body {
     flex-shrink: 0;
 }
 
+.ai-thinking {
+    animation: thinkingGlow 1.5s infinite alternate;
+}
+
+@keyframes thinkingGlow {
+    from { filter: drop-shadow(0 0 5px #00ffff) brightness(1.2); }
+    to { filter: drop-shadow(0 0 20px #00ffff) brightness(1.7); }
+}
+
 .player-name {
     display: block;
     margin-bottom: 6px;
@@ -91,6 +100,30 @@ body {
 .health-fill.low {
     background: linear-gradient(180deg, #ff5b6f, #d92a47 55%, #8a1025) !important;
 }
+
+.health-bar.critical-hit {
+    animation: barImpact 0.4s ease;
+}
+
+@keyframes barImpact {
+    0% { transform: scaleX(1); box-shadow: inset 0 0 0 rgba(255, 0, 0, 0); }
+    30% { transform: scaleX(1.05); box-shadow: inset 0 0 25px rgba(255, 0, 0, 0.9); }
+    60% { transform: scaleX(0.98); box-shadow: inset 0 0 10px rgba(255, 0, 0, 0.5); }
+    100% { transform: scaleX(1); box-shadow: inset 0 0 0 rgba(255, 0, 0, 0); }
+}
+
+.reward-score {
+    font-size: 8px;
+    color: #4af;
+    margin-top: 4px;
+    font-family: 'Press Start 2P', monospace;
+    text-shadow: 1px 1px 0px #000;
+}
+
+.reward-score.right {
+    text-align: right;
+}
+
 
 .timer-box {
     min-width: 82px;
@@ -545,10 +578,26 @@ body {
     z-index: 200;
     display: none;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     background: rgba(2, 4, 10, 0.92);
+    overflow-y: auto;
 }
+
+.victory-scroll-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+    padding: 5vh 0;
+    width: 100%;
+    margin: auto 0;
+}
+
+.victory-overlay::-webkit-scrollbar { width: 8px; }
+.victory-overlay::-webkit-scrollbar-track { background: #000; border-radius: 4px; }
+.victory-overlay::-webkit-scrollbar-thumb { background: #4af; border-radius: 4px; }
 
 .victory-overlay h1 {
     margin-bottom: 12px;
@@ -556,6 +605,19 @@ body {
     color: #ffe44f;
     text-shadow: 4px 4px 0 #000, 0 0 24px rgba(255, 228, 79, 0.75);
     animation: victoryPulse 0.6s ease-in-out infinite alternate;
+}
+
+.knockout-text {
+    font-size: 60px !important;
+    color: #ff1111 !important;
+    text-shadow: 5px 5px 0 #000, 0 0 40px rgba(255, 0, 0, 1) !important;
+    animation: zoomKnockout 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+
+@keyframes zoomKnockout {
+    0% { transform: scale(0.1) rotate(-10deg); opacity: 0; }
+    50% { transform: scale(1.2) rotate(5deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
 .winner-model {
@@ -765,6 +827,22 @@ body {
     text-shadow: 0 0 20px #ff0000, 4px 4px 0 #000;
     transform: scale(1.8);
     z-index: 105;
+}
+
+.floating-text.ultimate {
+    font-size: 40px;
+    color: #ff00ff;
+    text-shadow: 0 0 35px #ff00ff, 4px 4px 0 #000, -2px -2px 0 #fff;
+    z-index: 200;
+    transform: scale(2);
+}
+
+.floating-text.combo {
+    color: #00ffff;
+    font-size: 28px;
+    font-weight: bold;
+    text-shadow: 0 0 20px #00ffff, 3px 3px 0 #000;
+    z-index: 106;
 }
 
 .fight-arena.flash-critical::after {

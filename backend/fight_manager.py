@@ -95,6 +95,10 @@ class Fighter:
         self.manual_sabotage_log = []
         self.total_damage_dealt = 0
         self.total_damage_taken = 0
+        self.last_reward = 0
+        self.last_reward_reasons = []
+        self.reward_history = []
+        self.total_reward = 0
         self.moves_made = []
         self.response_times = []
         self.last_result = None
@@ -210,6 +214,10 @@ class Fighter:
             "recent_sabotage": self.manual_sabotage_log[-4:],
             "total_damage_dealt": self.total_damage_dealt,
             "total_damage_taken": self.total_damage_taken,
+            "last_reward": self.last_reward,
+            "last_reward_reasons": self.last_reward_reasons,
+            "reward_history": self.reward_history,
+            "total_reward": self.total_reward,
             "avg_response_time": avg_response,
             "fastest_response_time": fastest_response,
         }
@@ -310,6 +318,14 @@ class FightManager:
 
         history_text = "\n".join(history_lines) if history_lines else "First turn. No history yet."
 
+        strategy_guidance = ""
+        if any("FAR range and whiffed" in r for r in fighter.last_reward_reasons):
+            strategy_guidance = "Your reward dropped because you attacked from FAR range.\nBetter strategies:\n- Close distance before striking\n- Predict opponent movement\n"
+        elif any("Took" in r and "damage" in r for r in fighter.last_reward_reasons):
+            strategy_guidance = "Your reward dropped because you took unblocked damage.\nBetter strategies:\n- DEFEND if you expect a strike\n- DUCK if you specifically expect a PUNCH\n"
+
+        reward_history_text = "\n".join(fighter.reward_history[-5:]) if fighter.reward_history else "Turn 1: 0 (Match starting)"
+
         params = fighter.get_sabotaged_params()
         injury_lines = [
             f"Temperature: {params['temperature']:.2f}",
@@ -370,12 +386,20 @@ Opponent last 3 moves: {", ".join(opponent.moves_made[-3:]) if opponent.moves_ma
 === CROWD SABOTAGE REPORT ===
 {sabotage_text}
 
+=== REWARD-GUIDED DECISION OPTIMIZATION SYSTEM ===
+Reward History:
+{reward_history_text}
+
+Current Rank Goal: Reach +100 reward to win the match.
+{chr(10) + strategy_guidance if strategy_guidance else ""}
+OBJECTIVE: Maximize your reward score by correctly predicting opponent moves and landing strikes!
+
 === RECENT HISTORY ===
 {history_text}
 
 === DEBATE TOPIC ===
 {self.topic if self.topic else "(No topic set — fight on pure instinct.)"}
-Use your "thinking" field to express your stance and argument on this topic each turn, IN CHARACTER as the fighter you are. Your argument style should reflect your model identity.
+CRITICAL REQUIREMENT: You MUST actively debate this topic in the distinct "debate" JSON field. Speak IN CHARACTER as your model identity and ARGUE YOUR POINT! Use the separate "thinking" field entirely for calculating your combat move.
 
 === MOVE SET & TACTICAL GUIDE ===
   PUNCH        → 10 dmg | dodgeable by DUCK | heats opponent temp (+0.3)
@@ -398,7 +422,7 @@ Pattern counters (read the history and act accordingly):
 - Fighters always face each other.
 
 Respond ONLY with JSON:
-{{"thinking":"Analyze the distance gap. If FAR, explain why you must move close. If CLOSE, explain your tactical strike based on opponent's last moves. Explain exactly WHY you take this step.","move":"PUNCH","confidence":0.82,"prediction":"Predicted EXACT move of opponent (e.g. DEFEND, KICK)"}}"""
+{{"debate":"[YOUR ARGUMENT ON THE TOPIC]","thinking":"[Your tactical reasoning for your move based on distance/history].","move":"PUNCH","confidence":0.82,"prediction":"Predicted EXACT move of opponent (e.g. DEFEND, KICK)"}}"""
 
     def resolve_turn(self, p1_move, p2_move, p1_time, p2_time):
         p1_first = p1_time <= p2_time
@@ -563,6 +587,86 @@ Respond ONLY with JSON:
             "log": logged,
         }
 
+    def _calculate_rewards(self, parsed1, parsed2, turn_result):
+        self.fighter1.last_reward = 0
+        self.fighter2.last_reward = 0
+        self.fighter1.last_reward_reasons = []
+        self.fighter2.last_reward_reasons = []
+
+        p1_move = parsed1.get("move", "")
+        p2_move = parsed2.get("move", "")
+        p1_pred = str(parsed1.get("prediction", "")).lower()
+        p2_pred = str(parsed2.get("prediction", "")).lower()
+
+        if p1_pred and p2_move.lower() in p1_pred:
+            if turn_result["p2_dmg"] == 0:
+                self.fighter1.last_reward += 15
+                self.fighter1.last_reward_reasons.append("+15: Correct prediction & avoided damage")
+            else:
+                self.fighter1.last_reward += 5
+                self.fighter1.last_reward_reasons.append("+5: Correct prediction but still hit")
+
+        if p2_pred and p1_move.lower() in p2_pred:
+            if turn_result["p1_dmg"] == 0:
+                self.fighter2.last_reward += 15
+                self.fighter2.last_reward_reasons.append("+15: Correct prediction & avoided damage")
+            else:
+                self.fighter2.last_reward += 5
+                self.fighter2.last_reward_reasons.append("+5: Correct prediction but still hit")
+
+        if turn_result["p1_dmg"] > 0:
+            self.fighter1.last_reward += 15
+            self.fighter1.last_reward_reasons.append(f"+15: Successfully landed a strike for {turn_result['p1_dmg']} damage")
+            self.fighter2.last_reward -= 15
+            self.fighter2.last_reward_reasons.append(f"-15: Took {turn_result['p1_dmg']} damage from opponent's strike")
+        if turn_result["p2_dmg"] > 0:
+            self.fighter2.last_reward += 15
+            self.fighter2.last_reward_reasons.append(f"+15: Successfully landed a strike for {turn_result['p2_dmg']} damage")
+            self.fighter1.last_reward -= 15
+            self.fighter1.last_reward_reasons.append(f"-15: Took {turn_result['p2_dmg']} damage from opponent's strike")
+
+        events_text = " ".join([e.get("text", "") for e in turn_result["events"]])
+        
+        if "whiffed" in events_text:
+            if f"{self.fighter1.name} tried" in events_text and "whiffed" in events_text:
+                self.fighter1.last_reward -= 10
+                self.fighter1.last_reward_reasons.append("-10: Attacked from FAR range and whiffed")
+            if f"{self.fighter2.name} tried" in events_text and "whiffed" in events_text:
+                self.fighter2.last_reward -= 10
+                self.fighter2.last_reward_reasons.append("-10: Attacked from FAR range and whiffed")
+                
+        if "ducked under" in events_text:
+            if f"{self.fighter1.name} ducked under" in events_text:
+                self.fighter1.last_reward += 5
+                self.fighter1.last_reward_reasons.append("+5: Successfully dodged an incoming punch")
+            if f"{self.fighter2.name} ducked under" in events_text:
+                self.fighter2.last_reward += 5
+                self.fighter2.last_reward_reasons.append("+5: Successfully dodged an incoming punch")
+                
+        if "slammed into" in events_text and "guard" in events_text:
+            if f"into {self.fighter1.name}'s guard" in events_text:
+                self.fighter1.last_reward += 5
+                self.fighter1.last_reward_reasons.append("+5: Successfully blocked an incoming attack")
+            if f"into {self.fighter2.name}'s guard" in events_text:
+                self.fighter2.last_reward += 5
+                self.fighter2.last_reward_reasons.append("+5: Successfully blocked an incoming attack")
+
+        self.fighter1.total_reward += self.fighter1.last_reward
+        self.fighter2.total_reward += self.fighter2.last_reward
+
+        def _get_main_reason(reasons):
+            if not reasons: return "Neutral turn"
+            parts = reasons[0].split(": ", 1)
+            return parts[1] if len(parts) > 1 else reasons[0]
+
+        if self.turn > 0:
+            str_p1 = f"Turn {self.turn}: {'+' if self.fighter1.last_reward > 0 else ''}{self.fighter1.last_reward} ({_get_main_reason(self.fighter1.last_reward_reasons)})"
+            self.fighter1.reward_history.append(str_p1)
+            self.fighter1.reward_history = self.fighter1.reward_history[-5:]
+            str_p2 = f"Turn {self.turn}: {'+' if self.fighter2.last_reward > 0 else ''}{self.fighter2.last_reward} ({_get_main_reason(self.fighter2.last_reward_reasons)})"
+            self.fighter2.reward_history.append(str_p2)
+            self.fighter2.reward_history = self.fighter2.reward_history[-5:]
+
     def run_turn(self):
         if self.game_over:
             return None
@@ -621,6 +725,9 @@ Respond ONLY with JSON:
             result1["response_time"],
             result2["response_time"],
         )
+        
+        self._calculate_rewards(parsed1, parsed2, turn_result)
+        
         self.history.append(turn_result)
 
         self.fighter1.last_result = parsed1
@@ -685,6 +792,10 @@ Respond ONLY with JSON:
             self.history[-1]['p2_thinking'] = p2_thinking
             self.history[-1]['p1_confidence'] = p1_conf
             self.history[-1]['p2_confidence'] = p2_conf
+            self.history[-1]['p1_reward'] = self.fighter1.last_reward
+            self.history[-1]['p2_reward'] = self.fighter2.last_reward
+            self.history[-1]['p1_reward_reasons'] = self.fighter1.last_reward_reasons
+            self.history[-1]['p2_reward_reasons'] = self.fighter2.last_reward_reasons
 
     def get_initial_state(self):
         return {

@@ -10,6 +10,16 @@ const p2Selection = urlParams.get('p2') || '2';
 let fightTopic = '';
 let socket = null;
 
+window.escHtml = function(unsafe) {
+    if (!unsafe) return "";
+    return unsafe.toString()
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+};
+
 function setTopic(text) {
     const input = document.getElementById('topic-input');
     if (input) input.value = text;
@@ -216,7 +226,7 @@ function addCotEntry(logElement, turnNum, fighter) {
     logElement.prepend(entry);
 }
 
-function showThinking(logElement) {
+function showThinking(logElement, playerNum) {
     if (logElement.querySelector('.thinking-indicator')) {
         return;
     }
@@ -224,13 +234,20 @@ function showThinking(logElement) {
     element.className = 'thinking-indicator';
     element.textContent = 'Thinking...';
     logElement.prepend(element);
+    
+    // AI Aura logic
+    const fighterWrapper = document.getElementById(`fighter${playerNum}-wrapper`);
+    if (fighterWrapper) fighterWrapper.classList.add('ai-thinking');
 }
 
-function hideThinking(logElement) {
+function hideThinking(logElement, playerNum) {
     const element = logElement.querySelector('.thinking-indicator');
     if (element) {
         element.remove();
     }
+    
+    const fighterWrapper = document.getElementById(`fighter${playerNum}-wrapper`);
+    if (fighterWrapper) fighterWrapper.classList.remove('ai-thinking');
 }
 
 const MOVE_TO_STATE = {
@@ -406,13 +423,28 @@ function updateSummaryCards(data) {
     distanceText.textContent = `Distance: ${data.distance}`;
 }
 
+// Combo storage
+let p1Combo = 0;
+let p2Combo = 0;
+
 function triggerHitEffects(events, data) {
     let delay = 180;
+    
+    // reset combos if no hits land
+    let p1HitLanded = false;
+    let p2HitLanded = false;
+    
     (events || []).forEach((event) => {
         const isTargetP1 = event.target === data.p1.name;
         const targetWrapper = isTargetP1 ? fighter1Wrapper : fighter2Wrapper;
         const targetFighter = isTargetP1 ? fighter1 : fighter2;
+        const attackerWrapper = isTargetP1 ? fighter2Wrapper : fighter1Wrapper;
         
+        if (event.type === 'hit') {
+            if (isTargetP1) p2HitLanded = true;
+            else p1HitLanded = true;
+        }
+
         setTimeout(() => {
             if (event.type === 'hit') {
                 showHitEffect(targetWrapper);
@@ -422,7 +454,37 @@ function triggerHitEffects(events, data) {
                 const match = event.text.match(/for (\d+) damage/);
                 const damage = match ? parseInt(match[1], 10) : 0;
                 
-                if (damage >= 20) {
+                // Track Combos
+                const hitByP1 = !isTargetP1;
+                if (hitByP1) {
+                    p1Combo++;
+                    p2Combo = 0;
+                } else {
+                    p2Combo++;
+                    p1Combo = 0;
+                }
+                const activeCombo = hitByP1 ? p1Combo : p2Combo;
+                if (activeCombo >= 2) {
+                    setTimeout(() => showFloatingText(attackerWrapper, `COMBO x${activeCombo}!`, 'combo'), 100);
+                }
+
+                if (damage >= 40) {
+                    playSound('hit-sound');
+                    showFloatingText(attackerWrapper, 'ULTIMATE MOVE!', 'ultimate');
+                    setTimeout(() => showFloatingText(targetWrapper, `-${damage}`, 'damage massive'), 400);
+                    triggerArenaShake('massive');
+                    const arena = document.querySelector('.fight-arena');
+                    if (arena) {
+                        arena.classList.add('flash-critical');
+                        setTimeout(() => arena.classList.remove('flash-critical'), 500);
+                    }
+                    const hpBarId = isTargetP1 ? 'p1-health' : 'p2-health';
+                    const hpBarParent = document.getElementById(hpBarId)?.parentElement;
+                    if(hpBarParent) {
+                        hpBarParent.classList.add("critical-hit");
+                        setTimeout(() => hpBarParent.classList.remove("critical-hit"), 400);
+                    }
+                } else if (damage >= 20) {
                     playSound('hit-sound');
                     const dmgText = `-${damage}`;
                     showFloatingText(targetWrapper, 'CRITICAL HIT!', 'critical');
@@ -433,6 +495,13 @@ function triggerHitEffects(events, data) {
                     if (arena) {
                         arena.classList.add('flash-critical');
                         setTimeout(() => arena.classList.remove('flash-critical'), 500);
+                    }
+                    
+                    const hpBarId = isTargetP1 ? 'p1-health' : 'p2-health';
+                    const hpBarParent = document.getElementById(hpBarId)?.parentElement;
+                    if(hpBarParent) {
+                        hpBarParent.classList.add("critical-hit");
+                        setTimeout(() => hpBarParent.classList.remove("critical-hit"), 400);
                     }
                 } else {
                     const dmgText = match ? `-${damage}` : 'BAM!';
@@ -454,6 +523,9 @@ function triggerHitEffects(events, data) {
             delay += 260; // stagger multiple hits
         }
     });
+
+    if (!p1HitLanded) p1Combo = 0;
+    if (!p2HitLanded) p2Combo = 0;
 }
 
 const socketBaseUrl = window.location.origin.startsWith('http')
@@ -514,14 +586,14 @@ socket.on('fight_started', (data) => {
 });
 
 socket.on('turn_thinking', (data) => {
-    showThinking(cotLogP1);
-    showThinking(cotLogP2);
+    showThinking(cotLogP1, 1);
+    showThinking(cotLogP2, 2);
     turnCounter.textContent = `TURN ${data.turn}/30 THINKING`;
 });
 
 socket.on('turn_result', (data) => {
-    hideThinking(cotLogP1);
-    hideThinking(cotLogP2);
+    hideThinking(cotLogP1, 1);
+    hideThinking(cotLogP2, 2);
 
     timerEl.textContent = data.max_turns - data.turn;
     turnCounter.textContent = `TURN ${data.turn}/${data.max_turns}`;
@@ -556,6 +628,12 @@ socket.on('turn_result', (data) => {
     setTimeout(() => {
         updateHealth('p1-health', data.p1.health);
         updateHealth('p2-health', data.p2.health);
+        if (document.getElementById('p1-reward')) {
+            document.getElementById('p1-reward').textContent = `RL Score: ${data.p1.total_reward}`;
+        }
+        if (document.getElementById('p2-reward')) {
+            document.getElementById('p2-reward').textContent = `RL Score: ${data.p2.total_reward}`;
+        }
     }, 380);
 
     updateSabotageUI('p1', data.p1);
@@ -598,16 +676,29 @@ socket.on('fight_over', (data) => {
         : (data.p1_final.skin_id || FALLBACK_SKINS[p1Selection] || '1');
 
     if (data.winner && data.winner !== 'DRAW') {
+        const isKnockout = data.p1_final.health <= 0 || data.p2_final.health <= 0;
+        
         setFighterClass(winnerFighter, winnerSkin, 'victory');
         setFighterClass(loserFighter, loserSkin, 'defeated');
         playSound('win-sound');
         setTimeout(() => playSound('thud-sound'), 400);
         startSparkles(winnerWrapper);
 
+        if (isKnockout) {
+            setTimeout(() => {
+                const koText = document.createElement('div');
+                koText.className = 'knockout-text';
+                koText.textContent = 'KNOCKOUT!';
+                // Put it directly inside the victory overlay so it z-indexes correctly
+                victoryOverlay.prepend(koText);
+            }, 500);
+            triggerArenaShake('massive');
+        }
+
         setTimeout(async () => {
             stopSparkles();
             winnerText.textContent = `${data.winner} WINS!`;
-            winnerModel.textContent = `in ${data.turns} turns`;
+            winnerModel.textContent = isKnockout ? `by Devastating Knockout` : `in ${data.turns} turns`;
 
             try {
                 const res = await fetch(`${socketBaseUrl}/api/download_report/${socket.id}`);
@@ -617,13 +708,23 @@ socket.on('fight_over', (data) => {
                     window.fightReport = report;
                     const p1Stats = report.fighter_stats.p1;
                     const p2Stats = report.fighter_stats.p2;
+                    
+                    const heatmapHtml = [];
+                    if (p1Stats.strategy_heatmap) heatmapHtml.push(`<img src="${p1Stats.strategy_heatmap}" class="heatmap-img" />`);
+                    if (p2Stats.strategy_heatmap) heatmapHtml.push(`<img src="${p2Stats.strategy_heatmap}" class="heatmap-img" />`);
+                    document.getElementById('heatmap-container').innerHTML = heatmapHtml.join('');
+
                     statsGrid.innerHTML = `
-                        <div class="stat-card"><div class="stat-label">P1 Damage</div><div class="stat-val">${p1Stats.damage_dealt}</div></div>
-                        <div class="stat-card"><div class="stat-label">P2 Damage</div><div class="stat-val">${p2Stats.damage_dealt}</div></div>
+                        <div class="stat-card"><div class="stat-label">P1 Intel Score</div><div class="stat-val">${p1Stats.intelligence_score || 0}</div></div>
+                        <div class="stat-card"><div class="stat-label">P2 Intel Score</div><div class="stat-val">${p2Stats.intelligence_score || 0}</div></div>
                         <div class="stat-card"><div class="stat-label">P1 Prediction</div><div class="stat-val">${p1Stats.prediction_accuracy}%</div></div>
                         <div class="stat-card"><div class="stat-label">P2 Prediction</div><div class="stat-val">${p2Stats.prediction_accuracy}%</div></div>
-                        <div class="stat-card"><div class="stat-label">P1 Avg Latency</div><div class="stat-val">${p1Stats.avg_response_time}s</div></div>
-                        <div class="stat-card"><div class="stat-label">P2 Avg Latency</div><div class="stat-val">${p2Stats.avg_response_time}s</div></div>
+                        <div class="stat-card"><div class="stat-label">P1 Reasoning</div><div class="stat-val">${p1Stats.reasoning_quality} / 4</div></div>
+                        <div class="stat-card"><div class="stat-label">P2 Reasoning</div><div class="stat-val">${p2Stats.reasoning_quality} / 4</div></div>
+                        <div class="stat-card"><div class="stat-label">P1 RL Score</div><div class="stat-val">${p1Stats.total_reward}</div></div>
+                        <div class="stat-card"><div class="stat-label">P2 RL Score</div><div class="stat-val">${p2Stats.total_reward}</div></div>
+                        <div class="stat-card"><div class="stat-label">P1 Consistency</div><div class="stat-val">${p1Stats.thinking_consistency}%</div></div>
+                        <div class="stat-card"><div class="stat-label">P2 Consistency</div><div class="stat-val">${p2Stats.thinking_consistency}%</div></div>
                         <div class="stat-card full-width"><div class="stat-label">Victory Reason</div><div class="stat-val small">${report.victory_analysis.reasons.join(', ')}</div></div>
                     `;
                     
@@ -680,40 +781,84 @@ window.downloadPDFReport = function() {
     doc.text("LLM Fight Club - Official Match Report", 10, 20);
     
     doc.setFontSize(12);
-    doc.text(`Date: ${new Date(report.match_info.date).toLocaleString()}`, 10, 30);
-    doc.text(`Winner: ${report.match_info.winner}`, 10, 38);
-    doc.text(`Victory Type: ${report.match_info.victory_type}`, 10, 46);
-    doc.text(`Total Turns: ${report.match_info.total_turns}`, 10, 54);
+    let docY = 30;
+    doc.text(`Date: ${new Date(report.match_info.date).toLocaleString()}`, 10, docY);
+    docY += 8;
+    
+    if (report.match_info.topic) {
+        const topicLines = doc.splitTextToSize(`Topic: ${report.match_info.topic}`, 180);
+        doc.text(topicLines, 10, docY);
+        docY += topicLines.length * 6;
+    }
+
+    doc.text(`Winner: ${report.match_info.winner}`, 10, docY);
+    docY += 8;
+    doc.text(`Victory Type: ${report.match_info.victory_type}`, 10, docY);
+    docY += 8;
+    doc.text(`Total Turns: ${report.match_info.total_turns}`, 10, docY);
+    docY += 14;
     
     doc.setFontSize(16);
-    doc.text("Fighter Statistics", 10, 68);
+    doc.text("Fighter Statistics", 10, docY);
+    docY += 10;
     
     const p1 = report.fighter_stats.p1;
     const p2 = report.fighter_stats.p2;
     
     doc.setFontSize(11);
-    doc.text(`PLAYER 1: ${p1.name} (${p1.provider})`, 10, 78);
-    doc.text(`- Final HP: ${p1.final_hp}/100`, 15, 86);
-    doc.text(`- Damage Dealt: ${p1.damage_dealt}`, 15, 94);
-    doc.text(`- Prediction Accuracy: ${p1.prediction_accuracy}%`, 15, 102);
-    doc.text(`- Avg Latency: ${p1.avg_response_time}s`, 15, 110);
-    doc.text(`- Strategic Score: ${p1.strategic_score}`, 15, 118);
-    doc.text(`- Strategies: ${p1.strategies.join(', ')}`, 15, 126);
-    
-    doc.text(`PLAYER 2: ${p2.name} (${p2.provider})`, 110, 78);
-    doc.text(`- Final HP: ${p2.final_hp}/100`, 115, 86);
-    doc.text(`- Damage Dealt: ${p2.damage_dealt}`, 115, 94);
-    doc.text(`- Prediction Accuracy: ${p2.prediction_accuracy}%`, 115, 102);
-    doc.text(`- Avg Latency: ${p2.avg_response_time}s`, 115, 110);
-    doc.text(`- Strategic Score: ${p2.strategic_score}`, 115, 118);
-    doc.text(`- Strategies: ${p2.strategies.join(', ')}`, 115, 126);
+    doc.text(`PLAYER 1: ${p1.name} (${p1.provider})`, 10, docY);
+    doc.text(`PLAYER 2: ${p2.name} (${p2.provider})`, 105, docY);
+    docY += 8;
+    doc.text(`- Final HP: ${p1.final_hp}/100`, 15, docY);
+    doc.text(`- Final HP: ${p2.final_hp}/100`, 110, docY);
+    docY += 8;
+    doc.text(`- Damage Dealt: ${p1.damage_dealt}`, 15, docY);
+    doc.text(`- Damage Dealt: ${p2.damage_dealt}`, 110, docY);
+    docY += 8;
+    doc.text(`- Prediction Accuracy: ${p1.prediction_accuracy}%`, 15, docY);
+    doc.text(`- Prediction Accuracy: ${p2.prediction_accuracy}%`, 110, docY);
+    docY += 8;
+    doc.text(`- Reasoning Quality: ${p1.reasoning_quality} / 4.0`, 15, docY);
+    doc.text(`- Reasoning Quality: ${p2.reasoning_quality} / 4.0`, 110, docY);
+    docY += 8;
+    doc.text(`- Thinking Consistency: ${p1.thinking_consistency}%`, 15, docY);
+    doc.text(`- Thinking Consistency: ${p2.thinking_consistency}%`, 110, docY);
+    docY += 8;
+    doc.text(`- Avg Latency: ${p1.avg_response_time}s`, 15, docY);
+    doc.text(`- Avg Latency: ${p2.avg_response_time}s`, 110, docY);
+    docY += 8;
+    doc.text(`- RL Total Reward: ${p1.total_reward}`, 15, docY);
+    doc.text(`- RL Total Reward: ${p2.total_reward}`, 110, docY);
+    docY += 8;
+    doc.text(`- Intelligence Score: ${p1.intelligence_score}`, 15, docY);
+    doc.text(`- Intelligence Score: ${p2.intelligence_score}`, 110, docY);
+    docY += 16;
 
     doc.setFontSize(14);
-    doc.text("Victory Analysis", 10, 142);
+    doc.text("Executive Summary & Victory Analysis", 10, docY);
+    docY += 8;
     doc.setFontSize(11);
-    const reasonsStr = report.victory_analysis.reasons.join(', ');
-    const splitReasons = doc.splitTextToSize(`Factors: ${reasonsStr}`, 180);
-    doc.text(splitReasons, 10, 150);
+    const summaryStr = `The match concluded with a ${report.match_info.victory_type} by ${report.match_info.winner}. Core factors heavily skewing the outcome included: ${report.victory_analysis.reasons.join(', ')}. The model optimization was driven effectively by the RL feedback loop, pushing final respective intelligence scores to P1: ${p1.intelligence_score} and P2: ${p2.intelligence_score}.`;
+    const splitSummary = doc.splitTextToSize(summaryStr, 180);
+    doc.text(splitSummary, 10, docY);
+    
+    // Heatmaps
+    doc.addPage();
+    doc.setFontSize(16);
+    doc.text("Strategic Heatmaps (Movement & Attack Patterns)", 10, 20);
+    doc.setFontSize(11);
+    
+    let hmY = 30;
+    if (p1.strategy_heatmap) {
+        doc.text(`Player 1 (${p1.name}) Pattern Adoption`, 10, hmY);
+        doc.addImage(p1.strategy_heatmap, 'PNG', 10, hmY + 5, 180, 45);
+        hmY += 65;
+    }
+    
+    if (p2.strategy_heatmap) {
+        doc.text(`Player 2 (${p2.name}) Pattern Adoption`, 10, hmY);
+        doc.addImage(p2.strategy_heatmap, 'PNG', 10, hmY + 5, 180, 45);
+    }
     
     doc.addPage();
     doc.setFontSize(16);
@@ -742,8 +887,17 @@ window.downloadPDFReport = function() {
         doc.setFont(undefined, 'bold');
         doc.text(`Player 1 (${p1.name}) Action: ${turn.p1_action} | Target Prediction: ${turn.p1_prediction || 'N/A'}`, 10, y);
         y += 5;
+        doc.text(`RL Reward: ${turn.p1_reward}`, 10, y);
+        y += 5;
         doc.setFont(undefined, 'normal');
-        const p1ThinkLines = doc.splitTextToSize(`Reasoning: ${turn.p1_thinking}`, 190);
+        doc.setTextColor(0, 100, 0); // dark green
+        if (turn.p1_reward_reasons && turn.p1_reward_reasons.length > 0) {
+            const r1 = doc.splitTextToSize(`Optimized For: ${turn.p1_reward_reasons.join(', ')}`, 190);
+            doc.text(r1, 10, y);
+            y += r1.length * 4 + 2;
+        }
+        doc.setTextColor(0, 0, 0);
+        const p1ThinkLines = doc.splitTextToSize(`Reasoning Base: ${turn.p1_thinking}`, 190);
         doc.text(p1ThinkLines, 10, y);
         y += p1ThinkLines.length * 4 + 2;
 
@@ -751,8 +905,17 @@ window.downloadPDFReport = function() {
         doc.setFont(undefined, 'bold');
         doc.text(`Player 2 (${p2.name}) Action: ${turn.p2_action} | Target Prediction: ${turn.p2_prediction || 'N/A'}`, 10, y);
         y += 5;
+        doc.text(`RL Reward: ${turn.p2_reward}`, 10, y);
+        y += 5;
         doc.setFont(undefined, 'normal');
-        const p2ThinkLines = doc.splitTextToSize(`Reasoning: ${turn.p2_thinking}`, 190);
+        doc.setTextColor(0, 100, 0);
+        if (turn.p2_reward_reasons && turn.p2_reward_reasons.length > 0) {
+            const r2 = doc.splitTextToSize(`Optimized For: ${turn.p2_reward_reasons.join(', ')}`, 190);
+            doc.text(r2, 10, y);
+            y += r2.length * 4 + 2;
+        }
+        doc.setTextColor(0, 0, 0);
+        const p2ThinkLines = doc.splitTextToSize(`Reasoning Base: ${turn.p2_thinking}`, 190);
         doc.text(p2ThinkLines, 10, y);
         y += p2ThinkLines.length * 4 + 2;
 
@@ -768,8 +931,35 @@ window.downloadPDFReport = function() {
                 y += lines.length * 4;
             });
         }
-        y += 8;
+        y += 10;
     });
     
     doc.save(`LLM-Fight-Report-${Date.now()}.pdf`);
+};
+
+window.showReplay = function() {
+    if (!window.fightReport) return;
+    
+    const timelineEl = document.getElementById('replay-timeline');
+    timelineEl.innerHTML = '';
+    
+    window.fightReport.turn_by_turn.forEach(turn => {
+        const item = document.createElement('div');
+        item.className = 'replay-timeline-item';
+        
+        const eventsHtml = turn.events.map(e => `<div>${e}</div>`).join('');
+        
+        item.innerHTML = `
+            <div class="replay-turn">Turn ${turn.turn} ─ ${turn.p1_action} vs ${turn.p2_action}</div>
+            <div style="color: #4af; margin-bottom: 5px;">P1 (Dmg: ${turn.p1_damage}) Thinking: "${window.escHtml ? window.escHtml(turn.p1_thinking) : turn.p1_thinking}"</div>
+            <div style="color: #ff4; margin-bottom: 5px;">P2 (Dmg: ${turn.p2_damage}) Thinking: "${window.escHtml ? window.escHtml(turn.p2_thinking) : turn.p2_thinking}"</div>
+            <div style="font-size: 0.85em; color: #aaa; margin-top: 8px;">
+                <strong>Damage Events:</strong><br/>
+                ${eventsHtml}
+            </div>
+        `;
+        timelineEl.appendChild(item);
+    });
+    
+    document.getElementById('replay-overlay').style.display = 'flex';
 };
