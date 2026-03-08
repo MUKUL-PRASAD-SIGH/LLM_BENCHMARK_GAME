@@ -590,18 +590,41 @@ socket.on('fight_over', (data) => {
         setTimeout(() => playSound('thud-sound'), 400);
         startSparkles(winnerWrapper);
 
-        setTimeout(() => {
+        setTimeout(async () => {
             stopSparkles();
             winnerText.textContent = `${data.winner} WINS!`;
             winnerModel.textContent = `in ${data.turns} turns`;
-            statsGrid.innerHTML = `
-                <div class="stat-card"><div class="stat-label">P1 Damage</div><div class="stat-val">${data.p1_final.total_damage_dealt}</div></div>
-                <div class="stat-card"><div class="stat-label">P2 Damage</div><div class="stat-val">${data.p2_final.total_damage_dealt}</div></div>
-                <div class="stat-card"><div class="stat-label">P1 Avg Latency</div><div class="stat-val">${data.p1_final.avg_response_time}s</div></div>
-                <div class="stat-card"><div class="stat-label">P2 Avg Latency</div><div class="stat-val">${data.p2_final.avg_response_time}s</div></div>
-                <div class="stat-card"><div class="stat-label">P1 Brain</div><div class="stat-val">${data.p1_final.brain_integrity}%</div></div>
-                <div class="stat-card"><div class="stat-label">P2 Brain</div><div class="stat-val">${data.p2_final.brain_integrity}%</div></div>
-            `;
+
+            try {
+                const res = await fetch(`${socketBaseUrl}/api/download_report/${socket.id}`);
+                const reportData = await res.json();
+                if (reportData.analysis_report) {
+                    const report = reportData.analysis_report;
+                    window.fightReport = report;
+                    const p1Stats = report.fighter_stats.p1;
+                    const p2Stats = report.fighter_stats.p2;
+                    statsGrid.innerHTML = `
+                        <div class="stat-card"><div class="stat-label">P1 Damage</div><div class="stat-val">${p1Stats.damage_dealt}</div></div>
+                        <div class="stat-card"><div class="stat-label">P2 Damage</div><div class="stat-val">${p2Stats.damage_dealt}</div></div>
+                        <div class="stat-card"><div class="stat-label">P1 Prediction</div><div class="stat-val">${p1Stats.prediction_accuracy}%</div></div>
+                        <div class="stat-card"><div class="stat-label">P2 Prediction</div><div class="stat-val">${p2Stats.prediction_accuracy}%</div></div>
+                        <div class="stat-card"><div class="stat-label">P1 Avg Latency</div><div class="stat-val">${p1Stats.avg_response_time}s</div></div>
+                        <div class="stat-card"><div class="stat-label">P2 Avg Latency</div><div class="stat-val">${p2Stats.avg_response_time}s</div></div>
+                        <div class="stat-card full-width"><div class="stat-label">Victory Reason</div><div class="stat-val small">${report.victory_analysis.reasons.join(', ')}</div></div>
+                    `;
+                    
+                    const pdfBtn = document.getElementById('download-pdf-btn');
+                    if (pdfBtn) pdfBtn.style.display = 'inline-block';
+                }
+            } catch (err) {
+                console.error("Failed to fetch post-match report", err);
+                statsGrid.innerHTML = `
+                    <div class="stat-card"><div class="stat-label">P1 Damage</div><div class="stat-val">${data.p1_final.total_damage_dealt}</div></div>
+                    <div class="stat-card"><div class="stat-label">P2 Damage</div><div class="stat-val">${data.p2_final.total_damage_dealt}</div></div>
+                    <div class="stat-card"><div class="stat-label">P1 Avg Latency</div><div class="stat-val">${data.p1_final.avg_response_time}s</div></div>
+                    <div class="stat-card"><div class="stat-label">P2 Avg Latency</div><div class="stat-val">${data.p2_final.avg_response_time}s</div></div>
+                `;
+            }
             victoryOverlay.style.display = 'flex';
         }, 4200);
     } else {
@@ -626,3 +649,88 @@ function sendSabotageAction(player, action) {
 }
 
 window.sendSabotageAction = sendSabotageAction;
+
+window.downloadPDFReport = function() {
+    if (!window.fightReport) return;
+    
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        alert("PDF Library not loaded.");
+        return;
+    }
+    
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const report = window.fightReport;
+    
+    doc.setFontSize(20);
+    doc.text("LLM Fight Club - Official Match Report", 10, 20);
+    
+    doc.setFontSize(12);
+    doc.text(`Date: ${new Date(report.match_info.date).toLocaleString()}`, 10, 30);
+    doc.text(`Winner: ${report.match_info.winner}`, 10, 38);
+    doc.text(`Victory Type: ${report.match_info.victory_type}`, 10, 46);
+    doc.text(`Total Turns: ${report.match_info.total_turns}`, 10, 54);
+    
+    doc.setFontSize(16);
+    doc.text("Fighter Statistics", 10, 68);
+    
+    const p1 = report.fighter_stats.p1;
+    const p2 = report.fighter_stats.p2;
+    
+    doc.setFontSize(11);
+    doc.text(`PLAYER 1: ${p1.name} (${p1.provider})`, 10, 78);
+    doc.text(`- Final HP: ${p1.final_hp}/100`, 15, 86);
+    doc.text(`- Damage Dealt: ${p1.damage_dealt}`, 15, 94);
+    doc.text(`- Prediction Accuracy: ${p1.prediction_accuracy}%`, 15, 102);
+    doc.text(`- Avg Latency: ${p1.avg_response_time}s`, 15, 110);
+    doc.text(`- Strategic Score: ${p1.strategic_score}`, 15, 118);
+    doc.text(`- Strategies: ${p1.strategies.join(', ')}`, 15, 126);
+    
+    doc.text(`PLAYER 2: ${p2.name} (${p2.provider})`, 110, 78);
+    doc.text(`- Final HP: ${p2.final_hp}/100`, 115, 86);
+    doc.text(`- Damage Dealt: ${p2.damage_dealt}`, 115, 94);
+    doc.text(`- Prediction Accuracy: ${p2.prediction_accuracy}%`, 115, 102);
+    doc.text(`- Avg Latency: ${p2.avg_response_time}s`, 115, 110);
+    doc.text(`- Strategic Score: ${p2.strategic_score}`, 115, 118);
+    doc.text(`- Strategies: ${p2.strategies.join(', ')}`, 115, 126);
+
+    doc.setFontSize(14);
+    doc.text("Victory Analysis", 10, 142);
+    doc.setFontSize(11);
+    const reasonsStr = report.victory_analysis.reasons.join(', ');
+    const splitReasons = doc.splitTextToSize(`Factors: ${reasonsStr}`, 180);
+    doc.text(splitReasons, 10, 150);
+    
+    doc.addPage();
+    doc.setFontSize(16);
+    doc.text("Turn-By-Turn Breakdown", 10, 20);
+    
+    doc.setFontSize(10);
+    let y = 30;
+    
+    report.turn_by_turn.forEach(turn => {
+        if (y > 270) {
+            doc.addPage();
+            y = 20;
+        }
+        
+        doc.setFont(undefined, 'bold');
+        doc.text(`Turn ${turn.turn}`, 10, y);
+        doc.setFont(undefined, 'normal');
+        
+        const actionStr = `First: ${turn.first_mover.toUpperCase()} | P1: ${turn.p1_action} (${turn.p1_damage} dmg) vs P2: ${turn.p2_action} (${turn.p2_damage} dmg)`;
+        doc.text(actionStr, 10, y + 6);
+        
+        let localY = y + 12;
+        if (turn.events && turn.events.length > 0) {
+            turn.events.forEach(evt => {
+                const lines = doc.splitTextToSize(`> ${evt}`, 180);
+                doc.text(lines, 15, localY);
+                localY += lines.length * 5;
+            });
+        }
+        y = localY + 4;
+    });
+    
+    doc.save(`LLM-Fight-Report-${Date.now()}.pdf`);
+};

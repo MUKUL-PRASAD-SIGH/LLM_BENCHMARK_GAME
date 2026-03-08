@@ -328,6 +328,7 @@ class FightManager:
 
         last_self_move = fighter.moves_made[-1] if fighter.moves_made else "None"
         last_opp_move = opponent.moves_made[-1] if opponent.moves_made else "None"
+        last_prediction = fighter.last_result.get("prediction", "None") if fighter.last_result else "None"
 
         if params.get("system_corruption"):
             return (
@@ -364,6 +365,7 @@ Opponent last 3 moves: {", ".join(opponent.moves_made[-3:]) if opponent.moves_ma
 === YOUR BRAIN STATE ===
 {chr(10).join(injury_lines)}
     Your last move: {last_self_move}
+    Your last prediction: {last_prediction}
 
 === CROWD SABOTAGE REPORT ===
 {sabotage_text}
@@ -623,6 +625,8 @@ Respond ONLY with JSON:
 
         self.fighter1.last_result = parsed1
         self.fighter2.last_result = parsed2
+        
+        self.store_turn_predictions(parsed1.get('prediction', "None"), parsed2.get('prediction', "None"))
 
         if self.turn >= self.max_turns and not self.game_over:
             self.game_over = True
@@ -668,6 +672,11 @@ Respond ONLY with JSON:
             "winner_id": self.winner.fighter_id if self.winner else None,
             "winner_position": self.winner.position if self.winner else None,
         }
+
+    def store_turn_predictions(self, p1_prediction, p2_prediction):
+        if self.history:
+            self.history[-1]['p1_prediction'] = p1_prediction
+            self.history[-1]['p2_prediction'] = p2_prediction
 
     def get_initial_state(self):
         return {

@@ -342,6 +342,7 @@
         <h1 id="winner-text">WINNER!</h1>
         <div class="winner-model" id="winner-model"></div>
         <div class="stats-grid" id="stats-grid"></div>
+        <button id="download-pdf-btn" onclick="downloadPDFReport()" style="display:none; background: linear-gradient(180deg, #3a86ff, #0056b3); border-color: #003087;">DOWNLOAD PDF REPORT</button>
         <button onclick="location.href='select.html'">REMATCH</button>
         <button onclick="location.href='index.html'">MAIN MENU</button>
     </div>
@@ -352,6 +353,7 @@
     <audio id="thud-sound" src="assets/sounds/thud.mp3"></audio>
     <audio id="win-sound" src="assets/sounds/win.mp3"></audio>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="js/arena-ai.js"></script>
 </body>
 

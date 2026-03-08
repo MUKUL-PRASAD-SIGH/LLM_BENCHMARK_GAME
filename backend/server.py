@@ -16,9 +16,11 @@ from flask_socketio import SocketIO, emit
 try:
     from .fight_manager import FightManager
     from .llm_engine import MODELS
+    from .analysis_engine import FightAnalyzer
 except ImportError:
     from fight_manager import FightManager
     from llm_engine import MODELS
+    from analysis_engine import FightAnalyzer
 
 load_dotenv()
 
@@ -48,6 +50,21 @@ def get_models():
 @app.route("/api/health")
 def health_check():
     return jsonify({"status": "ok", "fights": len(active_fights)})
+
+
+@app.route("/api/download_report/<sid>")
+def download_report(sid):
+    if sid not in active_fights:
+        return jsonify({"error": "Fight not found or already cleared."}), 404
+        
+    fight_data = active_fights.get(sid)
+    fight = fight_data.get("fight") if fight_data else None
+    
+    if not fight:
+        return jsonify({"error": "Invalid fight state."}), 500
+
+    analyzer = FightAnalyzer(fight)
+    return jsonify({"analysis_report": analyzer.generate_final_report()})
 
 
 @socketio.on("connect")

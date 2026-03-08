@@ -104,8 +104,38 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            min-width: 140px;
+        }
+
+        .player-list-scroll {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             gap: 10px;
-            min-width: 120px;
+            max-height: 55vh;
+            overflow-y: auto;
+            padding: 10px 15px;
+            width: 100%;
+        }
+
+        .player-list-scroll::-webkit-scrollbar {
+            width: 14px;
+        }
+
+        .player-list-scroll::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid #4a4a8a;
+        }
+
+        .player-list-scroll::-webkit-scrollbar-thumb {
+            background: #4a4a8a;
+            border: 2px solid #1e90ff;
+            cursor: pointer;
+        }
+
+        .player-list-scroll::-webkit-scrollbar-thumb:hover {
+            background: #ffcc00;
+            border-color: #fff;
         }
 
         .player-side h3 {
@@ -346,15 +376,17 @@
         function PlayerSide({ title, id, players, models, selectedPlayer, disabledPlayer, onSelect }) {
             return React.createElement('div', { className: 'player-side', id }, [
                 React.createElement('h3', { key: 'title' }, title),
-                ...players.map((fighterId) =>
-                    React.createElement(PlayerButton, {
-                        key: fighterId,
-                        fighterId,
-                        model: models[fighterId],
-                        selected: selectedPlayer === fighterId,
-                        disabled: disabledPlayer === fighterId,
-                        onClick: onSelect
-                    })
+                React.createElement('div', { className: 'player-list-scroll', key: 'list' },
+                    players.map((fighterId) =>
+                        React.createElement(PlayerButton, {
+                            key: fighterId,
+                            fighterId,
+                            model: models[fighterId],
+                            selected: selectedPlayer === fighterId,
+                            disabled: disabledPlayer === fighterId,
+                            onClick: onSelect
+                        })
+                    )
                 )
             ]);
         }

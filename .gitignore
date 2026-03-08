@@ -6,3 +6,6 @@ backend/.env
 dist/
 build/
 .DS_Store
+llm_thinking_is_actual_fight.md
+feature_analysis_engine.md
+dumped_code.md
