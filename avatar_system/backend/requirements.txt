@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+# AI libs
+mediapipe
+opencv-python-headless
+numpy
+insightface
+torch
+torchvision

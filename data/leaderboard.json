@@ -2,11 +2,11 @@
   "models": [
     {
       "name": "groq",
-      "wins": 15,
+      "wins": 16,
       "losses": 14,
-      "avg_score": 22.33,
-      "prediction_accuracy": 29.91,
-      "reasoning_quality": 2.08,
+      "avg_score": 23.24,
+      "prediction_accuracy": 30.39,
+      "reasoning_quality": 2.09,
       "categories": {
         "Technical": {
           "score": 20.21,
@@ -29,18 +29,18 @@
           "matches": 3
         },
         "General": {
-          "score": 25.8,
-          "matches": 1
+          "score": 37.67,
+          "matches": 2
         }
       }
     },
     {
       "name": "ollama",
       "wins": 5,
-      "losses": 6,
-      "avg_score": 21.47,
-      "prediction_accuracy": 34.16,
-      "reasoning_quality": 1.85,
+      "losses": 7,
+      "avg_score": 21.13,
+      "prediction_accuracy": 31.31,
+      "reasoning_quality": 1.93,
       "categories": {
         "Technical": {
           "score": 28.05,
@@ -63,8 +63,8 @@
           "matches": 1
         },
         "General": {
-          "score": 28.52,
-          "matches": 1
+          "score": 22.98,
+          "matches": 2
         }
       }
     }

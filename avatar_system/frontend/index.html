@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Avatar Setup | Connect your Face</title>
+    <!-- We build modern game-ready UIs -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
+        body { background: #0b0f19; color: white; display: flex; height: 100vh; overflow: hidden; }
+
+        /* Left Side: Creation Studio */
+        .studio-panel { flex: 1; padding: 40px; border-right: 1px solid rgba(255,255,255,0.1); background: #13192b; overflow-y: auto; }
+        .studio-panel h1 { font-size: 36px; font-weight: 900; background: -webkit-linear-gradient(45deg, #00f0ff, #ff007f); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 30px; }
+        
+        .upload-zone { border: 2px dashed #00f0ff; background: rgba(0, 240, 255, 0.05); padding: 40px; text-align: center; border-radius: 12px; cursor: pointer; transition: 0.3s; margin-bottom: 30px; }
+        .upload-zone:hover { background: rgba(0, 240, 255, 0.1); }
+        .upload-zone h3 { margin-bottom: 10px; color: #00f0ff; }
+        .upload-zone p { color: #8892b0; font-size: 14px; }
+        #file-input { display: none; }
+        #preview-img { max-width: 150px; border-radius: 50%; border: 3px solid #00f0ff; display: none; margin: 20px auto 0; }
+
+        .form-group { margin-bottom: 25px; }
+        .form-group label { display: block; margin-bottom: 10px; color: #ccd6f6; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+        select, input { width: 100%; padding: 12px; background: #0b0f19; border: 1px solid #1e293b; color: white; border-radius: 6px; outline: none; }
+        select:focus, input:focus { border-color: #00f0ff; }
+
+        .btn-primary { width: 100%; padding: 15px; border: none; background: linear-gradient(90deg, #ff007f, #00f0ff); color: white; font-weight: 900; font-size: 16px; border-radius: 6px; cursor: pointer; text-transform: uppercase; letter-spacing: 2px; transition: 0.3s; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0,240,255,0.4); }
+
+        /* Right Side: Visual Output / Multiverse Viewer */
+        .viewer-panel { flex: 1; padding: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at center, #1b2735 0%, #0b0f19 100%); position: relative; }
+        
+        .avatar-preview-box { width: 350px; height: 500px; border: 2px solid rgba(255,255,255,0.1); border-radius: 20px; box-shadow: 0 0 50px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; background: #000; overflow: hidden; position: relative; }
+        .avatar-preview-box img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; transition: opacity 0.5s; }
+        .avatar-preview-box::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 50px black; pointer-events: none; }
+
+        .hologram-scan { position: absolute; top: 0; left: 0; right: 0; height: 10px; background: rgba(0, 240, 255, 0.8); box-shadow: 0 0 20px #00f0ff; display: none; z-index: 10; animation: scanLine 2s linear infinite; }
+        @keyframes scanLine { 0% { top: 0; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+
+        /* Style Multiverse Grid */
+        .style-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 30px; width: 100%; max-width: 400px; }
+        .style-card { background: #13192b; border: 1px solid rgba(255,255,255,0.1); padding: 10px; text-align: center; border-radius: 8px; cursor: pointer; transition: 0.3s; font-size: 12px; font-weight: 600; }
+        .style-card:hover, .style-card.active { border-color: #00f0ff; background: rgba(0, 240, 255, 0.1); color: #00f0ff; }
+
+        /* Analysis Console */
+        .console { position: absolute; bottom: 20px; left: 20px; width: 300px; background: rgba(0,0,0,0.8); border: 1px solid #333; padding: 15px; font-family: monospace; font-size: 11px; color: #00ff00; border-radius: 6px; display: none; }
+        .console p { margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="studio-panel">
+        <h1>AVATAR LAB</h1>
+        
+        <form id="avatar-form">
+            <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+                <h3>[ TAP TO UPLOAD SELFIE ]</h3>
+                <p>AI will extract 3D blendshapes from this image.</p>
+                <input type="file" id="file-input" accept="image/*">
+                <img id="preview-img" src="" alt="Face Preview">
+            </div>
+
+            <div class="form-group">
+                <label>Body Template</label>
+                <select id="body_type">
+                    <option value="athletic">Athletic Fighter</option>
+                    <option value="slim">Slim Striker</option>
+                    <option value="heavy">Heavy Brawler</option>
+                    <option value="curvy">Agile / Curvy</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Hair Style</label>
+                <select id="hair_style">
+                    <option value="short">Short Crew Cut</option>
+                    <option value="long">Long Flowing</option>
+                    <option value="dreadlocks">Cyber-Dreads</option>
+                    <option value="ponytail">Combat Ponytail</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Combat Gear</label>
+                <select id="outfit">
+                    <option value="cyberpunk_jacket">Neon Cyber Jacket</option>
+                    <option value="samurai_armor">Mecha Samurai Armor</option>
+                    <option value="street_fighter">Street Brawler Wrap</option>
+                    <option value="stealth_suit">Tactical Stealth Suit</option>
+                </select>
+            </div>
+
+            <button type="button" class="btn-primary" onclick="generateAvatar()">SPAWN 3D AVATAR</button>
+        </form>
+    </div>
+
+    <div class="viewer-panel">
+        <h2 style="margin-bottom:20px; font-weight:900; letter-spacing: 2px;">STYLE MULTIVERSE</h2>
+        
+        <div class="avatar-preview-box" id="avatar-preview-container">
+            <div class="hologram-scan" id="scan-line"></div>
+            <!-- Three.js Canvas injected here -->
+        </div>
+
+        <div class="style-grid" id="style-buttons" style="display:none;">
+            <div class="style-card active" onclick="applyStyle('realistic')">REALISTIC</div>
+            <div class="style-card" onclick="applyStyle('cyberpunk')">CYBERPUNK</div>
+            <div class="style-card" onclick="applyStyle('anime')">ANIME</div>
+            <div class="style-card" onclick="applyStyle('warrior')">WARRIOR</div>
+            <div class="style-card" onclick="applyStyle('cartoon')">CARTOON</div>
+            <div class="style-card" onclick="applyStyle('sci_fi_soldier')">SPACE MARINE</div>
+        </div>
+
+        <div class="console" id="debug-console">
+            <p>> Connecting to Mesh Analyzer...</p>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const previewImg = document.getElementById('preview-img');
+        const consoleLog = document.getElementById('debug-console');
+        const scanLine = document.getElementById('scan-line');
+        let currentUserId = Math.floor(Math.random() * 10000); 
+        let globalFeatures = null;
+
+        // --- THREE.JS 3D AVATAR MOCK SETUP ---
+        const container = document.getElementById('avatar-preview-container');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, 350 / 500, 0.1, 100);
+        camera.position.z = 5;
+
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(350, 500);
+        container.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(0, 10, 5);
+        scene.add(directionalLight);
+
+        // We use an Icosahedron to represent a low-poly head with morph targets mock
+        const geometry = new THREE.IcosahedronGeometry(1.5, 2);
+        
+        // Mock Morph Targets (three.js needs these manually set if not loading GLTF)
+        geometry.morphAttributes.position = [];
+        const posAttribute = geometry.attributes.position;
+        const targetJaw = new Float32Array(posAttribute.count * 3);
+        const targetEye = new Float32Array(posAttribute.count * 3);
+        
+        for (let i = 0; i < posAttribute.count; i++) {
+            let x = posAttribute.getX(i); let y = posAttribute.getY(i); let z = posAttribute.getZ(i);
+            // Jaw stretch (lower half widens)
+            targetJaw[i*3] = y < 0 ? x * 1.5 : x; 
+            targetJaw[i*3+1] = y; targetJaw[i*3+2] = z;
+            // Eye protrude (upper half z-axis)
+            targetEye[i*3] = x; targetEye[i*3+1] = y; 
+            targetEye[i*3+2] = (y > 0 && z > 0) ? z * 1.5 : z;
+        }
+        geometry.morphAttributes.position[0] = new THREE.BufferAttribute(targetJaw, 3);
+        geometry.morphAttributes.position[1] = new THREE.BufferAttribute(targetEye, 3);
+
+        const material = new THREE.MeshPhongMaterial({ 
+            color: 0x444444, 
+            wireframe: true, 
+            morphTargets: true 
+        });
+        const avatarMesh = new THREE.Mesh(geometry, material);
+        scene.add(avatarMesh);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            avatarMesh.rotation.y += 0.005;
+            renderer.render(scene, camera);
+        }
+        animate();
+        // -------------------------------------
+
+        fileInput.addEventListener('change', async (e) => {
+            if(e.target.files.length > 0) {
+                const file = e.target.files[0];
+                const url = URL.createObjectURL(file);
+                previewImg.src = url;
+                previewImg.style.display = 'block';
+                
+                await analyzeFace(file);
+            }
+        });
+
+        async function analyzeFace(file) {
+            consoleLog.style.display = 'block';
+            consoleLog.innerHTML += `<p>> Uploading Image [${file.size / 1024} KB]...</p>`;
+            scanLine.style.display = 'block';
+
+            const formData = new FormData();
+            formData.append('selfie', file);
+
+            try {
+                // Point to your FastAPI running instance
+                const res = await fetch('http://localhost:8000/api/v1/extract_features', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await res.json();
+                scanLine.style.display = 'none';
+
+                if (res.ok) {
+                    globalFeatures = data;
+                    consoleLog.innerHTML += `<p>> Mesh Extracted! Jaw:${data.jaw_width}, Skin:${data.skin_tone}</p>`;
+                    
+                    // Update 3D Model Morph Targets based on API
+                    avatarMesh.material.wireframe = false;
+                    avatarMesh.material.color.setHex(data.skin_tone === 'dark' ? 0x4a2e1b : (data.skin_tone === 'medium' ? 0xc8926a : 0xffddc0));
+                    
+                    // Simple morph logic scaling based on returned AI data
+                    avatarMesh.morphTargetInfluences[0] = Math.min(data.jaw_width / 15, 1);
+                    avatarMesh.morphTargetInfluences[1] = Math.min(data.eye_size / 20, 1);
+
+                } else {
+                    consoleLog.innerHTML += `<p style="color:red;">> Error: ${data.detail}</p>`;
+                }
+            } catch (err) {
+                scanLine.style.display = 'none';
+                consoleLog.innerHTML += `<p style="color:red;">> Network Error (Backend not running?)</p>`;
+                console.error(err);
+            }
+        }
+
+        async function generateAvatar() {
+            if (!globalFeatures) {
+                alert("Upload a selfie to map your face first!");
+                return;
+            }
+
+            consoleLog.innerHTML += `<p>> Binding 3D Rig and Armor...</p>`;
+            scanLine.style.display = 'block';
+
+            const config = {
+                user_id: currentUserId,
+                face_vector: globalFeatures,
+                body_type: document.getElementById('body_type').value,
+                hair_style: document.getElementById('hair_style').value,
+                hair_color: "black",
+                outfit: document.getElementById('outfit').value,
+                accessory: "none",
+                active_style: "realistic"
+            };
+
+            try {
+                const res = await fetch('http://localhost:8000/api/v1/generate_avatar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                const data = await res.json();
+                
+                scanLine.style.display = 'none';
+                if(res.ok) {
+                    consoleLog.innerHTML += `<p>> Avatar Spawned. ID: ${currentUserId}</p>`;
+                    document.getElementById('style-buttons').style.display = 'grid';
+                }
+            } catch (err) {
+                scanLine.style.display = 'none';
+                consoleLog.innerHTML += `<p style="color:red;">> Failed to Spawn Avatar.</p>`;
+            }
+        }
+
+        async function applyStyle(styleName) {
+            // Update active button
+            document.querySelectorAll('.style-card').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+
+            scanLine.style.display = 'block';
+            consoleLog.innerHTML += `<p>> Applying texture [${styleName}] to Diffuse Map...</p>`;
+
+            try {
+                const res = await fetch(`http://localhost:8000/api/v1/style_multiverse/${currentUserId}/${styleName}`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                
+                scanLine.style.display = 'none';
+                if(res.ok) {
+                    consoleLog.innerHTML += `<p>> AI Sync Complete. Skin updated.</p>`;
+                    const colors = {
+                        'cyberpunk': 0xff00ff, 'anime': 0xffcccc, 'warrior': 0x333333, 
+                        'cartoon': 0x00ccff, 'sci_fi_soldier': 0x00ff00, 'realistic': 0xffddc0
+                    };
+                    avatarMesh.material.color.setHex(colors[styleName] || 0x555555);
+                    avatarMesh.material.emissive.setHex(styleName === 'cyberpunk' ? 0xff00ff : 0x000000);
+                    avatarMesh.material.emissiveIntensity = styleName === 'cyberpunk' ? 0.3 : 0;
+                }
+            } catch (err) {
+                scanLine.style.display = 'none';
+                consoleLog.innerHTML += `<p style="color:red;">> Style API Offline.</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
