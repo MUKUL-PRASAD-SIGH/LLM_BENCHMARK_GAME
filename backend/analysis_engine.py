@@ -23,9 +23,15 @@ class FightAnalyzer:
                 actual_move = turn.get('p1_move')
                 
             if prediction and actual_move:
-                total += 1
-                if prediction == actual_move:
-                    correct += 1
+                pred_str = str(prediction).lower()
+                act_str = str(actual_move).lower()
+                
+                VALID_MOVES = ["punch", "kick", "defend", "dodge", "duck", "move_forward", "move_backward"]
+                
+                if any(move in pred_str for move in VALID_MOVES):
+                    total += 1
+                    if act_str in pred_str:
+                        correct += 1
                     
         return (correct / total * 100) if total > 0 else 0.0
 
@@ -33,20 +39,79 @@ class FightAnalyzer:
         moves = len(fighter.moves_made)
         return (fighter.total_damage_dealt / moves) if moves > 0 else 0.0
 
+    def calculate_reasoning_quality(self, is_p1=True):
+        if not self.fm.history:
+            return 0.0
+
+        total_score = 0
+        turns_with_thinking = 0
+
+        for turn in self.fm.history:
+            thinking = turn.get('p1_thinking') if is_p1 else turn.get('p2_thinking')
+            if thinking:
+                turns_with_thinking += 1
+                thinking_lower = str(thinking).lower()
+                score = 0
+                if "distance" in thinking_lower:
+                    score += 1
+                if "predict" in thinking_lower:
+                    score += 1
+                if "opponent" in thinking_lower:
+                    score += 1
+                if len(str(thinking).split()) > 12:
+                    score += 1
+                total_score += score
+                
+        return (total_score / turns_with_thinking) if turns_with_thinking > 0 else 0.0
+
+    def calculate_thinking_consistency(self, is_p1=True):
+        if not self.fm.history:
+            return 0.0
+            
+        consistent_turns = 0
+        total_valid_turns = 0
+        
+        for turn in self.fm.history:
+            if is_p1:
+                prediction = turn.get('p1_prediction')
+                actual_move = turn.get('p2_move')
+                thinking = turn.get('p1_thinking')
+            else:
+                prediction = turn.get('p2_prediction')
+                actual_move = turn.get('p1_move')
+                thinking = turn.get('p2_thinking')
+                
+            if prediction and actual_move:
+                pred_str = str(prediction).lower()
+                act_str = str(actual_move).lower()
+                
+                VALID_MOVES = ["punch", "kick", "defend", "dodge", "duck", "move_forward", "move_backward"]
+                
+                if any(move in pred_str for move in VALID_MOVES):
+                    total_valid_turns += 1
+                    if act_str in pred_str:
+                        if thinking and act_str in str(thinking).lower():
+                            consistent_turns += 1
+                            
+        return (consistent_turns / total_valid_turns * 100) if total_valid_turns > 0 else 0.0
+
     def calculate_strategic_score(self, fighter, opponent, is_p1=True):
         hp_score = fighter.health * 0.4
         damage_score = fighter.total_damage_dealt * 0.3
         
         prediction_accuracy = self.calculate_prediction_accuracy(fighter, is_p1)
-        prediction_score = prediction_accuracy * 0.2
+        prediction_score = prediction_accuracy * 0.1
         
         avg_response = sum(fighter.response_times) / len(fighter.response_times) if fighter.response_times else 0
         opp_avg_response = sum(opponent.response_times) / len(opponent.response_times) if opponent.response_times else 0
         
         speed_advantage = max(0, ((opp_avg_response - avg_response) / opp_avg_response * 100) if opp_avg_response > 0 else 0)
-        speed_score = speed_advantage * 0.1
+        speed_score = speed_advantage * 0.05
         
-        return hp_score + damage_score + prediction_score + speed_score
+        reasoning_score = self.calculate_reasoning_quality(is_p1) * 2.5
+        consistency_score = self.calculate_thinking_consistency(is_p1) * 0.05
+        
+        return hp_score + damage_score + prediction_score + speed_score + reasoning_score + consistency_score
 
     def analyze_move_patterns(self, fighter):
         patterns = {}
@@ -82,6 +147,10 @@ class FightAnalyzer:
                 "turn": index + 1,
                 "p1_action": item.get('p1_move'),
                 "p2_action": item.get('p2_move'),
+                "p1_thinking": item.get('p1_thinking', ''),
+                "p2_thinking": item.get('p2_thinking', ''),
+                "p1_prediction": item.get('p1_prediction', ''),
+                "p2_prediction": item.get('p2_prediction', ''),
                 "p1_damage": item.get('p1_dmg', 0),
                 "p2_damage": item.get('p2_dmg', 0),
                 "first_mover": "p1" if item.get('p1_first') else "p2",
@@ -152,6 +221,8 @@ class FightAnalyzer:
                     "damage_dealt": p1.total_damage_dealt,
                     "prediction_accuracy": round(self.calculate_prediction_accuracy(p1, True), 2),
                     "damage_efficiency": round(self.calculate_damage_efficiency(p1), 2),
+                    "reasoning_quality": round(self.calculate_reasoning_quality(True), 2),
+                    "thinking_consistency": round(self.calculate_thinking_consistency(True), 2),
                     "avg_response_time": round(sum(p1.response_times) / max(1, len(p1.response_times)), 2),
                     "strategic_score": round(p1_score, 2),
                     "strategies": self.detect_strategies(p1),
@@ -163,6 +234,8 @@ class FightAnalyzer:
                     "damage_dealt": p2.total_damage_dealt,
                     "prediction_accuracy": round(self.calculate_prediction_accuracy(p2, False), 2),
                     "damage_efficiency": round(self.calculate_damage_efficiency(p2), 2),
+                    "reasoning_quality": round(self.calculate_reasoning_quality(False), 2),
+                    "thinking_consistency": round(self.calculate_thinking_consistency(False), 2),
                     "avg_response_time": round(sum(p2.response_times) / max(1, len(p2.response_times)), 2),
                     "strategic_score": round(p2_score, 2),
                     "strategies": self.detect_strategies(p2),

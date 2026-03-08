@@ -309,13 +309,13 @@ function showFloatingText(wrapper, text, type) {
 function triggerArenaShake(intensity = 'light') {
     const arena = document.querySelector('.fight-arena');
     if (!arena) return;
-    arena.classList.remove('shake-light', 'shake-heavy');
+    arena.classList.remove('shake-light', 'shake-heavy', 'shake-massive');
     // Force a reflow to allow restarting the animation
     void arena.offsetWidth;
     arena.classList.add(`shake-${intensity}`);
     setTimeout(() => {
         arena.classList.remove(`shake-${intensity}`);
-    }, 500);
+    }, 600);
 }
 
 const SPARKLES = ['*', '+', 'o', '.', '#', 'x'];
@@ -419,12 +419,26 @@ function triggerHitEffects(events, data) {
                 targetFighter.classList.add('hit');
                 setTimeout(() => targetFighter.classList.remove('hit'), 300);
                 
-                // Show damage text if damage property exists in the event text, else default BAM
                 const match = event.text.match(/for (\d+) damage/);
-                const dmgText = match ? `-${match[1]}` : 'BAM!';
-                showFloatingText(targetWrapper, dmgText, 'damage');
+                const damage = match ? parseInt(match[1], 10) : 0;
                 
-                triggerArenaShake('heavy');
+                if (damage >= 20) {
+                    playSound('hit-sound');
+                    const dmgText = `-${damage}`;
+                    showFloatingText(targetWrapper, 'CRITICAL HIT!', 'critical');
+                    setTimeout(() => showFloatingText(targetWrapper, dmgText, 'damage massive'), 150);
+                    triggerArenaShake('massive');
+                    
+                    const arena = document.querySelector('.fight-arena');
+                    if (arena) {
+                        arena.classList.add('flash-critical');
+                        setTimeout(() => arena.classList.remove('flash-critical'), 500);
+                    }
+                } else {
+                    const dmgText = match ? `-${damage}` : 'BAM!';
+                    showFloatingText(targetWrapper, dmgText, 'damage');
+                    triggerArenaShake('heavy');
+                }
             } else if (event.type === 'blocked') {
                 showFloatingText(targetWrapper, 'BLOCKED!', 'block');
                 triggerArenaShake('light');
@@ -703,33 +717,58 @@ window.downloadPDFReport = function() {
     
     doc.addPage();
     doc.setFontSize(16);
-    doc.text("Turn-By-Turn Breakdown", 10, 20);
+    doc.text("Turn-By-Turn AI Reasoning Breakdown", 10, 20);
     
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     let y = 30;
     
     report.turn_by_turn.forEach(turn => {
-        if (y > 270) {
+        if (y > 250) {
             doc.addPage();
             y = 20;
         }
         
+        doc.setFontSize(11);
         doc.setFont(undefined, 'bold');
-        doc.text(`Turn ${turn.turn}`, 10, y);
+        doc.setTextColor(50, 50, 50);
+        doc.text(`Turn ${turn.turn} - First to act: ${turn.first_mover.toUpperCase()}`, 10, y);
         doc.setFont(undefined, 'normal');
+        doc.setTextColor(0, 0, 0);
+        y += 6;
         
-        const actionStr = `First: ${turn.first_mover.toUpperCase()} | P1: ${turn.p1_action} (${turn.p1_damage} dmg) vs P2: ${turn.p2_action} (${turn.p2_damage} dmg)`;
-        doc.text(actionStr, 10, y + 6);
+        doc.setFontSize(9);
         
-        let localY = y + 12;
+        // P1
+        doc.setFont(undefined, 'bold');
+        doc.text(`Player 1 (${p1.name}) Action: ${turn.p1_action} | Target Prediction: ${turn.p1_prediction || 'N/A'}`, 10, y);
+        y += 5;
+        doc.setFont(undefined, 'normal');
+        const p1ThinkLines = doc.splitTextToSize(`Reasoning: ${turn.p1_thinking}`, 190);
+        doc.text(p1ThinkLines, 10, y);
+        y += p1ThinkLines.length * 4 + 2;
+
+        // P2
+        doc.setFont(undefined, 'bold');
+        doc.text(`Player 2 (${p2.name}) Action: ${turn.p2_action} | Target Prediction: ${turn.p2_prediction || 'N/A'}`, 10, y);
+        y += 5;
+        doc.setFont(undefined, 'normal');
+        const p2ThinkLines = doc.splitTextToSize(`Reasoning: ${turn.p2_thinking}`, 190);
+        doc.text(p2ThinkLines, 10, y);
+        y += p2ThinkLines.length * 4 + 2;
+
+        // Resolution Details
+        doc.setFont(undefined, 'bold');
+        doc.text(`Resolution (P1 dealt ${turn.p1_damage} dmg | P2 dealt ${turn.p2_damage} dmg):`, 10, y);
+        y += 5;
+        doc.setFont(undefined, 'normal');
         if (turn.events && turn.events.length > 0) {
             turn.events.forEach(evt => {
-                const lines = doc.splitTextToSize(`> ${evt}`, 180);
-                doc.text(lines, 15, localY);
-                localY += lines.length * 5;
+                const lines = doc.splitTextToSize(`  - ${evt}`, 185);
+                doc.text(lines, 15, y);
+                y += lines.length * 4;
             });
         }
-        y = localY + 4;
+        y += 8;
     });
     
     doc.save(`LLM-Fight-Report-${Date.now()}.pdf`);

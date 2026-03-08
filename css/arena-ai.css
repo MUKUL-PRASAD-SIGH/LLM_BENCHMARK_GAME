@@ -721,6 +721,18 @@ body {
     40%, 60% { transform: translate3d(10px, 4px, 0); }
 }
 
+.fight-arena.shake-massive {
+    animation: shakeMassive 0.6s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+@keyframes shakeMassive {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    10%, 90% { transform: translate3d(-10px, -5px, 0); }
+    20%, 80% { transform: translate3d(15px, 10px, 0); }
+    30%, 50%, 70% { transform: translate3d(-20px, -15px, 0); }
+    40%, 60% { transform: translate3d(25px, 15px, 0); }
+}
+
 .floating-text {
     position: absolute;
     pointer-events: none;
@@ -736,6 +748,38 @@ body {
     color: #ff3333;
     font-size: 18px;
     transform: scale(1.2);
+}
+
+.floating-text.critical {
+    color: #ffee00;
+    font-size: 24px;
+    font-weight: bold;
+    text-shadow: 0 0 15px #ff0000, 3px 3px 0 #000;
+    transform: scale(1.5);
+    z-index: 105;
+}
+
+.floating-text.damage.massive {
+    color: #ffffff;
+    font-size: 32px;
+    text-shadow: 0 0 20px #ff0000, 4px 4px 0 #000;
+    transform: scale(1.8);
+    z-index: 105;
+}
+
+.fight-arena.flash-critical::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 0, 0, 0.4);
+    z-index: 90;
+    animation: screenFlash 0.5s ease-out;
+    pointer-events: none;
+}
+
+@keyframes screenFlash {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
 }
 
 .floating-text.block {

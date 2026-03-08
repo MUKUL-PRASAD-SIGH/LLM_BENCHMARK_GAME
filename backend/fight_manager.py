@@ -398,7 +398,7 @@ Pattern counters (read the history and act accordingly):
 - Fighters always face each other.
 
 Respond ONLY with JSON:
-{{"thinking":"2 short sentences on your current strategy AND your argument/stance on the debate topic","move":"PUNCH","confidence":0.82,"prediction":"opponent move"}}"""
+{{"thinking":"Analyze the distance gap. If FAR, explain why you must move close. If CLOSE, explain your tactical strike based on opponent's last moves. Explain exactly WHY you take this step.","move":"PUNCH","confidence":0.82,"prediction":"Predicted EXACT move of opponent (e.g. DEFEND, KICK)"}}"""
 
     def resolve_turn(self, p1_move, p2_move, p1_time, p2_time):
         p1_first = p1_time <= p2_time
@@ -626,7 +626,11 @@ Respond ONLY with JSON:
         self.fighter1.last_result = parsed1
         self.fighter2.last_result = parsed2
         
-        self.store_turn_predictions(parsed1.get('prediction', "None"), parsed2.get('prediction', "None"))
+        self.store_turn_metadata(
+            parsed1.get('prediction', "None"), parsed2.get('prediction', "None"),
+            parsed1.get('thinking', "None"), parsed2.get('thinking', "None"),
+            parsed1.get('confidence', 0), parsed2.get('confidence', 0)
+        )
 
         if self.turn >= self.max_turns and not self.game_over:
             self.game_over = True
@@ -673,10 +677,14 @@ Respond ONLY with JSON:
             "winner_position": self.winner.position if self.winner else None,
         }
 
-    def store_turn_predictions(self, p1_prediction, p2_prediction):
+    def store_turn_metadata(self, p1_prediction, p2_prediction, p1_thinking, p2_thinking, p1_conf, p2_conf):
         if self.history:
             self.history[-1]['p1_prediction'] = p1_prediction
             self.history[-1]['p2_prediction'] = p2_prediction
+            self.history[-1]['p1_thinking'] = p1_thinking
+            self.history[-1]['p2_thinking'] = p2_thinking
+            self.history[-1]['p1_confidence'] = p1_conf
+            self.history[-1]['p2_confidence'] = p2_conf
 
     def get_initial_state(self):
         return {
