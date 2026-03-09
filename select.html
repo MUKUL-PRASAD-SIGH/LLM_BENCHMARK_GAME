@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Select Fighters - LLM Fight Club</title>
     <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/fighters.css">
 
     <!-- React CDN -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -439,10 +440,240 @@
             margin-top: 4px;
             text-shadow: 1px 1px 0 #000;
         }
+    /* ====== AVATAR WIZARD STYLES ====== */
+    .av-overlay {
+        position: fixed; inset: 0; z-index: 20000;
+        background: rgba(0,0,0,0.92); backdrop-filter: blur(8px);
+        display: none; align-items: center; justify-content: center;
+        flex-direction: column;
+    }
+    .av-box {
+        background: linear-gradient(180deg, #0a0f1e 0%, #060912 100%);
+        border: 2px solid #00f0ff;
+        box-shadow: 0 0 40px rgba(0,240,255,0.3), inset 0 0 30px rgba(0,240,255,0.05);
+        border-radius: 12px;
+        padding: 30px;
+        width: 90%; max-width: 520px;
+        color: #e0f2ff;
+        font-family: 'Press Start 2P', monospace;
+        max-height: 90vh; overflow-y: auto;
+    }
+    .av-title {
+        font-size: 14px; color: #00f0ff;
+        text-align: center; margin-bottom: 20px;
+        text-shadow: 0 0 12px rgba(0,240,255,0.6);
+        letter-spacing: 2px;
+    }
+    .av-step { display: none; flex-direction: column; align-items: center; gap: 18px; }
+    .av-hint { font-size: 8px; color: #7098b8; text-align: center; line-height: 1.8; }
+    .av-drop-zone {
+        width: 260px; height: 180px;
+        border: 3px dashed #00f0ff;
+        border-radius: 10px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        cursor: pointer; gap: 12px;
+        transition: background 0.2s;
+        background: rgba(0,240,255,0.03);
+    }
+    .av-drop-zone:hover { background: rgba(0,240,255,0.08); }
+    .av-drop-icon { font-size: 44px; }
+    .av-drop-text { font-size: 8px; color: #4af; text-align: center; line-height: 1.9; }
+    canvas#av-canvas {
+        border: 2px solid #00f0ff;
+        border-radius: 8px;
+        max-width: 100%;
+    }
+    #av-face-preview {
+        width: 80px; height: 80px;
+        border-radius: 50%;
+        border: 3px solid #00f0ff;
+        box-shadow: 0 0 16px rgba(0,240,255,0.5);
+        object-fit: cover;
+    }
+    .av-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+    .av-gender-btn, .av-body-btn {
+        font-family: 'Press Start 2P', monospace;
+        font-size: 9px;
+        padding: 14px 20px;
+        cursor: pointer;
+        border: 2px solid #4a4a8a;
+        background: rgba(20,20,50,0.8);
+        color: #fff;
+        border-radius: 6px;
+        transition: all 0.15s;
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .av-gender-btn.active, .av-body-btn.active {
+        border-color: #00f0ff;
+        background: rgba(0,240,255,0.15);
+        box-shadow: 0 0 12px rgba(0,240,255,0.4);
+    }
+    .av-gender-icon { font-size: 32px; }
+    /* Fighter preview inside wizard */
+    #av-preview-wrap {
+        position: relative; width: 90px; height: 200px;
+        display: flex; align-items: flex-end; justify-content: center;
+        filter: drop-shadow(0 0 16px rgba(0,240,255,0.4));
+    }
+    .av-btn-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    .av-btn {
+        font-family: 'Press Start 2P', monospace;
+        font-size: 9px; padding: 11px 18px;
+        cursor: pointer; border-radius: 4px;
+        border: 2px solid; transition: all 0.15s;
+    }
+    .av-btn.primary {
+        background: linear-gradient(180deg, #00d0ff, #0090cc);
+        border-color: #00a0e0; color: #000;
+    }
+    .av-btn.primary:hover { background: linear-gradient(180deg, #33ddff, #00b0ee); }
+    .av-btn.secondary {
+        background: rgba(30,30,60,0.8);
+        border-color: #444; color: #aaa;
+    }
+    .av-btn.danger {
+        background: linear-gradient(180deg, #ff1133, #aa0020);
+        border-color: #cc0030; color: #fff;
+    }
+    .av-btn.success {
+        background: linear-gradient(180deg, #00cc44, #009930);
+        border-color: #007f24; color: #fff;
+    }
+    .av-body-label { font-size: 7px; color: #8fa0be; text-align: center; margin-top: 4px; }
+    .av-body-fighter-wrap {
+        width: 64px; height: 140px;
+        position: relative;
+        display: flex; align-items: flex-end; justify-content: center;
+        transform: scale(0.75); transform-origin: bottom center;
+    }
+    /* Avatar trigger button to show on each fighter in select screen */
+    .av-trigger-btn {
+        font-family: 'Press Start 2P', monospace;
+        font-size: 6px;
+        padding: 5px 7px;
+        background: rgba(0,240,255,0.15);
+        border: 1px solid #00f0ff;
+        color: #00f0ff;
+        cursor: pointer;
+        border-radius: 3px;
+        margin-top: 5px;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+    .av-trigger-btn:hover { background: rgba(0,240,255,0.3); }
     </style>
 </head>
 
 <body>
+    <!-- ========================= AVATAR WIZARD OVERLAY ========================= -->
+    <div id="avatar-wizard-overlay" class="av-overlay">
+        <div class="av-box">
+            <div class="av-title">🎮 AVATAR CREATOR</div>
+
+            <!-- STEP 1: UPLOAD -->
+            <div id="av-step-upload" class="av-step" style="display:flex;">
+                <div class="av-hint">UPLOAD YOUR PHOTO AND WE WILL<br>EXTRACT YOUR FACE & PUT IT ON<br>A FIGHTER BODY IN THE ARENA!</div>
+                <div class="av-drop-zone" onclick="document.getElementById('av-file-input').click()">
+                    <div class="av-drop-icon">📸</div>
+                    <div class="av-drop-text" id="av-upload-text">CLICK TO UPLOAD 4-5 PHOTOS<br>For optimum 3D face structure</div>
+                    <div id="av-thumbnails" style="display:flex; gap:5px; justify-content:center; margin-top:10px; flex-wrap:wrap;"></div>
+                </div>
+                <input id="av-file-input" type="file" accept="image/*" multiple style="display:none"
+                    onchange="AvatarMaker.onFilesSelected(this.files)">
+                <div class="av-btn-row">
+                    <button class="av-btn secondary" onclick="AvatarMaker.close()">CANCEL</button>
+                    <button id="av-upload-next-btn" class="av-btn primary" style="display:none;" onclick="AvatarMaker.goToGender()">NEXT: GENDER →</button>
+                </div>
+            </div>
+
+            <!-- STEP 3: GENDER -->
+            <div id="av-step-gender" class="av-step">
+                <div class="av-hint">SELECT YOUR GENDER TO CUSTOMIZE<br>THE FIGHTER BODY STYLE</div>
+                <div class="av-row">
+                    <button class="av-gender-btn active" data-gender="male" onclick="AvatarMaker.selectGender('male')">
+                        <div class="av-gender-icon">👦</div>
+                        <div>MALE</div>
+                    </button>
+                    <button class="av-gender-btn" data-gender="female" onclick="AvatarMaker.selectGender('female')">
+                        <div class="av-gender-icon">👧</div>
+                        <div>FEMALE</div>
+                    </button>
+                </div>
+                <div class="av-btn-row">
+                    <button class="av-btn secondary" onclick="AvatarMaker.backToUpload()">← BACK</button>
+                    <button class="av-btn primary" onclick="AvatarMaker.goToBody()">NEXT: BODY →</button>
+                </div>
+            </div>
+
+            <!-- STEP 4: BODY TEMPLATE -->
+            <div id="av-step-body" class="av-step">
+                <div class="av-hint">SELECT YOUR FIGHTER BODY TEMPLATE<br>YOUR FACE WILL BE PLACED ON TOP!</div>
+                <div class="av-row" id="av-body-grid">
+                    <button class="av-body-btn active" data-body="1" onclick="AvatarMaker.selectBody('1')">
+                        <div style="font-size:28px;">🥊</div>
+                        <div>BOXER</div>
+                        <div class="av-body-label">Classic Fighter<br>Red/Blue Theme</div>
+                    </button>
+                    <button class="av-body-btn" data-body="2" onclick="AvatarMaker.selectBody('2')">
+                        <div style="font-size:28px;">👹</div>
+                        <div>DEMON</div>
+                        <div class="av-body-label">Dark Horns<br>Purple Theme</div>
+                    </button>
+                    <button class="av-body-btn" data-body="3" onclick="AvatarMaker.selectBody('3')">
+                        <div style="font-size:28px;">🧛</div>
+                        <div>VAMPIRE</div>
+                        <div class="av-body-label">White Cape<br>Blood Theme</div>
+                    </button>
+                    <button class="av-body-btn" data-body="4" onclick="AvatarMaker.selectBody('4')">
+                        <div style="font-size:28px;">⚔️</div>
+                        <div>BRAWLER</div>
+                        <div class="av-body-label">Street Punk<br>Custom Theme</div>
+                    </button>
+                </div>
+                <div class="av-btn-row">
+                    <button class="av-btn secondary" onclick="AvatarMaker.backToGender()">← BACK</button>
+                    <button class="av-btn primary" onclick="AvatarMaker.goToPreview()">PREVIEW →</button>
+                </div>
+            </div>
+
+            <!-- STEP 5: FINAL PREVIEW & GENERATE -->
+            <div id="av-step-preview" class="av-step">
+                <div class="av-hint" id="av-preview-hint">FINAL PREVIEW<br>Click Generate to run the Deep Learning Face Swap Engine.</div>
+                
+                <div id="av-loading-spinner" style="display:none; text-align:center; margin: 20px 0;">
+                    <div class="av-drop-icon" style="animation: spin 2s linear infinite;">⚙️</div>
+                    <div style="color:#00f0ff; font-family:'Press Start 2P'; font-size:8px; margin-top:10px;">GENERATING 3D MESH...<br>This takes a moment.</div>
+                </div>
+                
+                <div style="width:100px; height:120px; border:1px solid #1a2a40; background:rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:flex-end; border-radius:8px; padding-bottom:5px;" id="av-fighter-container">
+                    <div class="fighter player1 idle" id="av-preview-fighter" style="transform:scale(1.0); transform-origin: bottom center;">
+                        <div class="piece leg-back"><div class="shoe"></div></div>
+                        <div class="piece arm-back"><div class="glove"></div></div>
+                        <div class="piece hips"></div>
+                        <div class="piece torso"></div>
+                        <div class="piece neck"></div>
+                        <div class="piece head">
+                            <div class="hair"></div>
+                            <div class="headband"></div>
+                            <div class="ear"></div>
+                            <div class="eye"></div>
+                            <div class="mouthguard"></div>
+                            <div class="mask"></div>
+                            <div class="peek-eye"></div>
+                        </div>
+                        <div class="piece leg-front"><div class="shoe"></div></div>
+                        <div class="piece arm-front"><div class="glove"></div></div>
+                    </div>
+                </div>
+
+                <div class="av-btn-row">
+                    <button class="av-btn secondary" onclick="AvatarMaker.backToBody()" id="av-btn-back-preview">← BACK</button>
+                    <button class="av-btn primary" onclick="AvatarMaker.generateAvatar()" id="av-btn-generate">GENERATE 3D AVATAR</button>
+                    <button class="av-btn primary" onclick="AvatarMaker.confirm()" id="av-btn-confirm" style="display:none; background:#ff003c; border-color:#ff003c; color:white;">✅ CONFIRM</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div id="root"></div>
 
     <audio id="bell-sound" src="assets/sounds/bell.mp3"></audio>
@@ -465,21 +696,37 @@
             ? window.location.origin
             : 'http://localhost:5000';
 
-        function PlayerButton({ fighterId, model, selected, disabled, onClick, customName }) {
+        function PlayerButton({ fighterId, model, selected, disabled, onClick, customName, side }) {
             const className = `player-btn ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`;
             const skinId = model.skin_id || fighterId;
+            const imgSrc = model.custom_avatar_url || `assets/images/characters/player${skinId}.png`;
+            // Check if this player has a saved avatar
+            const savedAvatar = (() => { try { return JSON.parse(sessionStorage.getItem(`avatar_${side}_${fighterId}`) || 'null'); } catch(e) { return null; } })();
+            const hasFaceAvatar = !!savedAvatar;
             return React.createElement('div', { style: { textAlign: 'center', maxWidth: '90px' } }, [
                 React.createElement('button', {
                     key: `btn-${fighterId}`,
-                    className,
+                    className: className + (hasFaceAvatar ? ' has-avatar' : ''),
                     'data-player': fighterId,
                     onClick: () => !disabled && onClick(fighterId)
                 },
                     React.createElement('img', {
-                        src: `assets/images/characters/player${skinId}.png`,
-                        alt: model.name
+                        src: imgSrc,
+                        alt: model.name,
+                        style: { objectFit: model.custom_avatar_url ? 'cover' : 'contain', borderRadius: model.custom_avatar_url ? '50%' : '0' }
                     })
                 ),
+                React.createElement('button', {
+                    key: `av-${fighterId}`,
+                    className: 'av-trigger-btn',
+                    disabled,
+                    onClick: (e) => {
+                        e.stopPropagation();
+                        window._pendingAvatarSide = side;
+                        window._pendingAvatarFighterId = fighterId;
+                        AvatarMaker.open(side);
+                    }
+                }, hasFaceAvatar ? '✦ AVATAR SET' : '🎮 MAKE AVATAR'),
                 customName && React.createElement('div', {
                     key: `custom-${fighterId}`,
                     className: 'player-custom-name'
@@ -508,7 +755,7 @@
             ]);
         }
 
-        function PlayerSide({ title, id, players, models, selectedPlayer, disabledPlayer, onSelect, customName }) {
+        function PlayerSide({ title, id, players, models, selectedPlayer, disabledPlayer, onSelect, customName, side }) {
             return React.createElement('div', { className: 'player-side', id }, [
                 React.createElement('h3', { key: 'title' }, title),
                 React.createElement('div', { className: 'player-list-scroll', key: 'list' },
@@ -520,41 +767,74 @@
                             selected: selectedPlayer === fighterId,
                             disabled: disabledPlayer === fighterId,
                             onClick: onSelect,
-                            customName: selectedPlayer === fighterId ? customName : null
+                            customName: selectedPlayer === fighterId ? customName : null,
+                            side
                         })
                     )
                 )
             ]);
         }
 
-        function NamePopup({ side, model, skinId, onConfirm, onCancel }) {
+        function NamePopup({ side, model, initialSkinId, fighterId, onConfirm, onCancel }) {
             const [name, setName] = useState('');
+            const [skinId, setSkinId] = useState(initialSkinId);
+            const [file, setFile] = useState(null);
+            const [previewUrl, setPreviewUrl] = useState(model.custom_avatar_url || null);
+            const [isSubmitting, setIsSubmitting] = useState(false);
             const inputRef = useRef(null);
 
             useEffect(() => {
-                if (inputRef.current) {
-                    inputRef.current.focus();
-                }
+                if (inputRef.current) inputRef.current.focus();
             }, []);
 
             const handleKeyDown = (e) => {
-                if (e.key === 'Enter' && name.trim()) {
-                    onConfirm(name.trim());
-                } else if (e.key === 'Escape') {
+                if (e.key === 'Enter' && name.trim() && !isSubmitting) {
+                    handleSubmit();
+                } else if (e.key === 'Escape' && !isSubmitting) {
                     onCancel();
                 }
             };
+            
+            const handleSubmit = async () => {
+                const finalName = name.trim();
+                if (!finalName) return;
+                setIsSubmitting(true);
+                let customAvatarUrl = model.custom_avatar_url || null;
+                
+                try {
+                    if (file) {
+                        const fd = new FormData();
+                        fd.append('file', file);
+                        const res = await fetch(`${API_BASE}/api/upload_avatar`, { 
+                            method: 'POST', body: fd 
+                        });
+                        const data = await res.json();
+                        if (data.avatar_url) customAvatarUrl = data.avatar_url;
+                    }
+
+                    await fetch(`${API_BASE}/api/models/${fighterId}/customize`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ skin_id: skinId, custom_avatar_url: customAvatarUrl })
+                    });
+                } catch(e) { console.error('Error saving avatar details', e); }
+                
+                onConfirm(finalName);
+            };
+
+            const imgSrc = previewUrl || (skinId ? `assets/images/characters/player${skinId}.png` : `assets/images/characters/player1.png`);
 
             return React.createElement('div', { className: 'name-popup-overlay' },
-                React.createElement('div', { className: 'name-popup-box' }, [
+                React.createElement('div', { className: 'name-popup-box', style: { maxWidth: '450px' } }, [
                     React.createElement('div', { key: 'title', className: 'name-popup-title' },
-                        `ENTER ${side === 'left' ? 'PLAYER 1' : 'PLAYER 2'} NAME`
+                        `CONFIGURE ${side === 'left' ? 'PLAYER 1' : 'PLAYER 2'}`
                     ),
                     React.createElement('div', { key: 'char', className: 'name-popup-character' }, [
                         React.createElement('img', {
                             key: 'img',
-                            src: `assets/images/characters/player${skinId}.png`,
-                            alt: model.name
+                            src: imgSrc,
+                            alt: model.name,
+                            style: { objectFit: previewUrl ? 'cover' : 'contain', borderRadius: previewUrl ? '50%' : '0' }
                         }),
                         React.createElement('div', { key: 'model', className: 'name-popup-model' }, model.name)
                     ]),
@@ -563,24 +843,56 @@
                         ref: inputRef,
                         type: 'text',
                         className: 'name-popup-input',
-                        placeholder: 'Your name...',
+                        placeholder: 'Display Name...',
                         value: name,
                         onChange: (e) => setName(e.target.value.slice(0, 20)),
                         onKeyDown: handleKeyDown,
                         maxLength: 20
                     }),
+                    React.createElement('select', {
+                        key: 'skin-select',
+                        className: 'name-popup-input',
+                        style: { appearance: 'none', backgroundColor: '#111' },
+                        value: skinId,
+                        onChange: (e) => { setSkinId(e.target.value); if(!file) setPreviewUrl(null); }
+                    }, [
+                        React.createElement('option', { key: '1', value: '1' }, 'Template Body: Avatar 1 (Boxer)'),
+                        React.createElement('option', { key: '2', value: '2' }, 'Template Body: Avatar 2 (Ninja)'),
+                        React.createElement('option', { key: '3', value: '3' }, 'Template Body: Avatar 3 (Robot)'),
+                        React.createElement('option', { key: '4', value: '4' }, 'Template Body: Avatar 4 (Brawler)')
+                    ]),
+                    React.createElement('div', { key: 'file-upload', style: { marginBottom: '20px', fontSize: '10px', color: '#aaa', fontFamily: '"Press Start 2P"' } }, [
+                        React.createElement('label', { key: 'lbl' }, 'Or Upload Custom Pic:'),
+                        React.createElement('input', {
+                            key: 'finput',
+                            type: 'file',
+                            accept: 'image/*',
+                            style: { fontSize: '8px', marginTop: '10px', width: '100%', color: '#4af' },
+                            onChange: (e) => {
+                                const f = e.target.files[0];
+                                if(f) {
+                                    setFile(f);
+                                    setPreviewUrl(URL.createObjectURL(f));
+                                } else {
+                                    setFile(null);
+                                    setPreviewUrl(model.custom_avatar_url || null);
+                                }
+                            }
+                        })
+                    ]),
                     React.createElement('div', { key: 'buttons', className: 'name-popup-buttons' }, [
                         React.createElement('button', {
                             key: 'cancel',
                             className: 'name-popup-btn cancel',
-                            onClick: onCancel
+                            onClick: onCancel,
+                            disabled: isSubmitting
                         }, 'CANCEL'),
                         React.createElement('button', {
                             key: 'confirm',
                             className: 'name-popup-btn confirm',
-                            onClick: () => name.trim() && onConfirm(name.trim()),
-                            disabled: !name.trim()
-                        }, 'CONFIRM')
+                            onClick: handleSubmit,
+                            disabled: !name.trim() || isSubmitting
+                        }, isSubmitting ? 'SAVING...' : 'CONFIRM')
                     ])
                 ])
             );
@@ -599,7 +911,7 @@
             // Custom Model States
             const [showCustomModal, setShowCustomModal] = useState(false);
             const [customModelData, setCustomModelData] = useState({
-                name: '', provider: 'groq', model_id: '', api_key: '', skin_id: '1'
+                name: '', provider: 'groq', model_id: '', api_key: ''
             });
 
             const clickSoundRef = useRef(null);
@@ -629,7 +941,7 @@
                 .then(res => res.json())
                 .then(data => {
                     setShowCustomModal(false);
-                    setCustomModelData({ name: '', provider: 'groq', model_id: '', api_key: '', skin_id: '1' });
+                    setCustomModelData({ name: '', provider: 'groq', model_id: '', api_key: '' });
                     fetchModels(); // Refresh available models
                 });
             }, [customModelData, fetchModels]);
@@ -654,6 +966,7 @@
             }, [playClick]);
 
             const handleNameConfirm = useCallback((name) => {
+                fetchModels(); // Refresh state from backend customization!
                 if (popupSide === 'left') {
                     setLeftSelected(pendingSelection);
                     setLeftName(name);
@@ -667,7 +980,7 @@
                 }
                 setPopupSide(null);
                 setPendingSelection(null);
-            }, [popupSide, pendingSelection, rightSelected]);
+            }, [popupSide, pendingSelection, rightSelected, fetchModels]);
 
             const handleNameCancel = useCallback(() => {
                 setPopupSide(null);
@@ -720,15 +1033,6 @@
                             key: 'mkey', className: 'name-popup-input', placeholder: 'API Key (Optional for Groq)', type: 'password',
                             value: customModelData.api_key, onChange: e => setCustomModelData({...customModelData, api_key: e.target.value})
                         }),
-                        React.createElement('select', {
-                            key: 'mskin', className: 'name-popup-input', style: { appearance: 'none', backgroundColor: '#111' },
-                            value: customModelData.skin_id, onChange: e => setCustomModelData({...customModelData, skin_id: e.target.value})
-                        }, [
-                            React.createElement('option', { key: 's1', value: '1' }, 'Avatar 1 (Boxer)'),
-                            React.createElement('option', { key: 's2', value: '2' }, 'Avatar 2 (Ninja)'),
-                            React.createElement('option', { key: 's3', value: '3' }, 'Avatar 3 (Robot)'),
-                            React.createElement('option', { key: 's4', value: '4' }, 'Avatar 4 (Brawler)')
-                        ]),
                         React.createElement('div', { key: 'btns', className: 'name-popup-buttons' }, [
                             React.createElement('button', { key: 'c', className: 'name-popup-btn cancel', onClick: () => setShowCustomModal(false) }, 'CANCEL'),
                             React.createElement('button', { key: 's', className: 'name-popup-btn confirm', onClick: handleCustomModelSubmit }, 'ADD MODEL')
@@ -739,7 +1043,8 @@
                     key: 'popup',
                     side: popupSide,
                     model: models[pendingSelection],
-                    skinId: models[pendingSelection].skin_id || pendingSelection,
+                    initialSkinId: models[pendingSelection].skin_id || pendingSelection,
+                    fighterId: pendingSelection,
                     onConfirm: handleNameConfirm,
                     onCancel: handleNameCancel
                 }),
@@ -765,7 +1070,8 @@
                         selectedPlayer: leftSelected,
                         disabledPlayer: null,
                         onSelect: handleLeftSelect,
-                        customName: leftName
+                        customName: leftName,
+                        side: 'p1'
                     }),
                     React.createElement('div', { key: 'vs', className: 'vs-text' }, 'VS'),
                     React.createElement(PlayerSide, {
@@ -777,7 +1083,8 @@
                         selectedPlayer: rightSelected,
                         disabledPlayer: leftSelected,
                         onSelect: handleRightSelect,
-                        customName: rightName
+                        customName: rightName,
+                        side: 'p2'
                     })
                 ]),
                 React.createElement('button', {
@@ -796,6 +1103,21 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(React.createElement(SelectionApp));
+    </script>
+
+    <!-- AFTER React: load fighters CSS + Avatar Maker -->
+    <script src="js/avatar-maker.js"></script>
+    <script>
+        // When avatar confirmed from wizard, refresh the React app to show the badge
+        window.onAvatarConfirmed = function(side, avatarData) {
+            // Store with fighterId key for per-model state
+            const fid = window._pendingAvatarFighterId;
+            if (fid) {
+                sessionStorage.setItem(`avatar_${side}_${fid}`, JSON.stringify(avatarData));
+                // Also store in the generic slot for arena pickup
+                sessionStorage.setItem(`avatar_${side}`, JSON.stringify(avatarData));
+            }
+        };
     </script>
 </body>
 

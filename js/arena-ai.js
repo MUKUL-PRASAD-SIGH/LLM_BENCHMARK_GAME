@@ -573,10 +573,29 @@ function initSocket() {
         window.p1DisplayName = p1CustomName || data.p1.name;
         window.p2DisplayName = p2CustomName || data.p2.name;
 
+        // Base Sprites
         const leftSkin = data.p1.skin_id || FALLBACK_SKINS[p1Selection] || '1';
         const rightSkin = data.p2.skin_id || FALLBACK_SKINS[p2Selection] || '2';
         fighter1.className = `fighter player${leftSkin} idle`;
         fighter2.className = `fighter player${rightSkin} idle facing-left`;
+
+        // Load custom overriding avatars into HUD
+        const h1 = document.getElementById('p1-avatar-hud');
+        if (h1 && data.p1.custom_avatar_url) {
+            h1.src = data.p1.custom_avatar_url;
+            h1.style.display = 'block';
+        } else if (h1) h1.style.display = 'none';
+
+        const h2 = document.getElementById('p2-avatar-hud');
+        if (h2 && data.p2.custom_avatar_url) {
+            h2.src = data.p2.custom_avatar_url;
+            h2.style.display = 'block';
+        } else if (h2) h2.style.display = 'none';
+
+        // Restore face avatars from the Avatar Creator wizard
+        if (typeof AvatarMaker !== 'undefined') {
+            AvatarMaker.restoreAvatars();
+        }
 
         updateSabotageUI('p1', data.p1);
         updateSabotageUI('p2', data.p2);

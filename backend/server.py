@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
+import uuid
 
 try:
     from .fight_manager import FightManager
@@ -69,6 +70,31 @@ def add_custom_model():
     }
     
     return jsonify({"slot_id": slot_id})
+
+
+@app.route("/api/upload_avatar", methods=["POST"])
+def upload_avatar():
+    file = request.files.get("file")
+    if not file or file.filename == "":
+        return jsonify({"error": "No file"}), 400
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "png"
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    filepath = os.path.join(os.path.dirname(__file__), "..", "assets", "images", "characters", "custom", filename)
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    file.save(filepath)
+    return jsonify({"avatar_url": f"assets/images/characters/custom/{filename}"})
+
+
+@app.route("/api/models/<model_id>/customize", methods=["POST"])
+def customize_model(model_id):
+    if model_id in MODELS:
+        data = request.json or {}
+        if "skin_id" in data:
+            MODELS[model_id]["skin_id"] = str(data["skin_id"])
+        if "custom_avatar_url" in data:
+            MODELS[model_id]["custom_avatar_url"] = data["custom_avatar_url"]
+        return jsonify({"status": "ok", "model": MODELS[model_id]})
+    return jsonify({"error": "Not found"}), 404
 
 
 @app.route("/api/health")

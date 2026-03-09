@@ -199,7 +199,10 @@
     <div class="top-bar">
         <div class="health-side left">
             <div class="model-label"><span class="dot" id="p1-dot"></span><span id="p1-model-name">-</span></div>
-            <span class="player-name" id="p1-name">PLAYER 1</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <img id="p1-avatar-hud" style="display:none; width:24px; height:24px; border-radius:50%; object-fit:cover; border:2px solid #4af;">
+                <span class="player-name" id="p1-name">PLAYER 1</span>
+            </div>
             <div class="health-bar">
                 <div class="health-fill p1" id="p1-health"></div>
             </div>
@@ -211,7 +214,10 @@
         </div>
         <div class="health-side right">
             <div class="model-label right"><span id="p2-model-name">-</span><span class="dot" id="p2-dot"></span></div>
-            <span class="player-name" id="p2-name">PLAYER 2</span>
+            <div style="display:flex; align-items:center; justify-content:flex-end; gap:8px;">
+                <span class="player-name" id="p2-name">PLAYER 2</span>
+                <img id="p2-avatar-hud" style="display:none; width:24px; height:24px; border-radius:50%; object-fit:cover; border:2px solid #f55036;">
+            </div>
             <div class="health-bar">
                 <div class="health-fill p2" id="p2-health"></div>
             </div>
@@ -441,6 +447,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="js/arena-ai.js"></script>
+    <script src="js/avatar-maker.js"></script>
 </body>
 
 </html>

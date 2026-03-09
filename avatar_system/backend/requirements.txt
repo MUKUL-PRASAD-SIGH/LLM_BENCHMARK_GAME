@@ -1,10 +1,26 @@
+# ============================================================
+# LLM Fight Club — Avatar System Backend Requirements
+# (Standalone avatar generation service, if used separately)
+# Last updated: 2026-03-09
+# ============================================================
+
+# --- Web Framework ---
 fastapi
-uvicorn
+uvicorn[standard]
+
+# --- File Upload Support ---
 python-multipart
-# AI libs
-mediapipe
-opencv-python-headless
-numpy
-insightface
-torch
-torchvision
+
+# --- Computer Vision (face detection / avatar generation) ---
+opencv-python-headless    # Headless CV2 (no display needed on server)
+mediapipe                 # Google MediaPipe for face mesh / landmarks
+numpy                     # Array operations for image processing
+
+# --- Deep Learning (avatar stylization / face swap) ---
+insightface               # Face analysis & swapping (buffalo_l model)
+torch                     # PyTorch base
+torchvision               # Image transforms for model input
+
+# --- Optional: Additional model support ---
+onnxruntime               # Required by insightface for inference
+pillow                    # PIL for image reading/writing

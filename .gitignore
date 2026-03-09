@@ -10,14 +10,12 @@ backend/.env
 dist/
 build/
 .DS_Store
-llm_thinking_is_actual_fight.md
-feature_analysis_engine.md
+# Docs
+docs/*
+!docs/avatar_system_overview.md
 dumped_code.md
-reasoning_score_feature.md
-metrics_evolution.md
-reasoning_score_feature.md
-intelligence_score_feature.md
-strategy_heatmaps_feature.md
-leaderboard_system_feature.md
-fight_replay_feature.md
-ui_upgrades_feature.md
+
+# Large Avatar Models
+*.onnx
+*.zip
+avatar_system/backend/models/models/

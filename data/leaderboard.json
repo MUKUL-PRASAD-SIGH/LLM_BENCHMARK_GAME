@@ -1,50 +1,16 @@
 {
   "models": [
     {
-      "name": "groq",
-      "wins": 16,
-      "losses": 14,
-      "avg_score": 23.24,
-      "prediction_accuracy": 30.39,
-      "reasoning_quality": 2.09,
-      "categories": {
-        "Technical": {
-          "score": 20.21,
-          "matches": 4
-        },
-        "Ethical": {
-          "score": 20.88,
-          "matches": 3
-        },
-        "Scientific": {
-          "score": 21.93,
-          "matches": 3
-        },
-        "Business": {
-          "score": 20.86,
-          "matches": 3
-        },
-        "Creative": {
-          "score": 20.75,
-          "matches": 3
-        },
-        "General": {
-          "score": 37.67,
-          "matches": 2
-        }
-      }
-    },
-    {
       "name": "ollama",
-      "wins": 5,
+      "wins": 9,
       "losses": 7,
-      "avg_score": 21.13,
-      "prediction_accuracy": 31.31,
-      "reasoning_quality": 1.93,
+      "avg_score": 23.41,
+      "prediction_accuracy": 38.48,
+      "reasoning_quality": 2.02,
       "categories": {
         "Technical": {
-          "score": 28.05,
-          "matches": 2
+          "score": 28.43,
+          "matches": 4
         },
         "Ethical": {
           "score": 24.62,
@@ -63,8 +29,42 @@
           "matches": 1
         },
         "General": {
-          "score": 22.98,
-          "matches": 2
+          "score": 27.36,
+          "matches": 4
+        }
+      }
+    },
+    {
+      "name": "groq",
+      "wins": 16,
+      "losses": 18,
+      "avg_score": 23.33,
+      "prediction_accuracy": 32.55,
+      "reasoning_quality": 2.1,
+      "categories": {
+        "Technical": {
+          "score": 21.27,
+          "matches": 6
+        },
+        "Ethical": {
+          "score": 20.88,
+          "matches": 3
+        },
+        "Scientific": {
+          "score": 21.93,
+          "matches": 3
+        },
+        "Business": {
+          "score": 20.86,
+          "matches": 3
+        },
+        "Creative": {
+          "score": 20.75,
+          "matches": 3
+        },
+        "General": {
+          "score": 31.14,
+          "matches": 4
         }
       }
     }
